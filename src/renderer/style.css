@@ -1,0 +1,510 @@
+:root {
+	font-family: "Rubik", system-ui, sans-serif;
+	color: #f1f3f5;
+	background: #15171a;
+	font-synthesis: none;
+	text-rendering: optimizeLegibility;
+}
+
+* {
+	box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+	width: 100%;
+	min-width: 640px;
+	height: 100%;
+	min-height: 100%;
+	margin: 0;
+}
+
+body {
+	overflow: hidden;
+	background: #15171a;
+	color: #f1f3f5;
+}
+
+button,
+select,
+input {
+	font: inherit;
+}
+
+button {
+	color: inherit;
+}
+
+.wizardWindow {
+	display: grid;
+	grid-template-rows: 58px 1fr 66px;
+	width: 100%;
+	height: 100vh;
+	min-height: 560px;
+	background: #1b1d21;
+}
+
+.wizardHeader {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+
+	padding: 12px 22px 10px;
+
+	border-bottom: 1px solid #30343a;
+	background: #202328;
+}
+
+.wizardLogo {
+	width: 46px;
+	height: 46px;
+	flex-shrink: 0;
+	object-fit: contain;
+	user-select: none;
+	-webkit-user-drag: none;
+}
+
+.wizardHeaderText {
+	display: flex;
+	flex-direction: column;
+	gap: 1px;
+}
+
+.wizardHeaderText strong {
+	font-size: 13px;
+	font-weight: 600;
+}
+
+.wizardHeaderText span {
+	color: #959ca6;
+	font-size: 11px;
+}
+
+.wizardPage {
+	min-height: 0;
+	overflow-y: auto;
+	background: #1b1d21;
+}
+
+.wizardTitle {
+	padding: 26px 34px 22px;
+	border-bottom: 1px solid #30343a;
+	background: #24272c;
+}
+
+.wizardTitle h1 {
+	margin: 0 0 6px;
+	color: #ffffff;
+	font-size: 20px;
+	font-weight: 600;
+	letter-spacing: -0.01em;
+}
+
+.wizardTitle p {
+	margin: 0;
+	color: #a4abb4;
+	font-size: 12px;
+	line-height: 1.45;
+}
+
+.wizardBody {
+	padding: 28px 34px;
+}
+
+.introText {
+	margin: 0 0 17px;
+	color: #c4c9cf;
+	font-size: 13px;
+}
+
+.selectionList {
+	overflow: hidden;
+	border: 1px solid #34383f;
+	border-radius: 4px;
+	background: #202328;
+}
+
+.selectionRow {
+	display: grid;
+	grid-template-columns: 18px 1fr auto;
+	align-items: center;
+	gap: 12px;
+	min-height: 76px;
+	padding: 14px 16px;
+	border-bottom: 1px solid #34383f;
+	cursor: pointer;
+}
+
+.selectionRow:last-child {
+	border-bottom: 0;
+}
+
+.selectionRow:hover {
+	background: #25282e;
+}
+
+.selectionRow.selected {
+	background: #252b31;
+	box-shadow: inset 3px 0 0 #0187f8;
+}
+
+.selectionRow input[type="radio"] {
+	width: 15px;
+	height: 15px;
+	margin: 0;
+	accent-color: #0187f8;
+}
+
+.selectionContent {
+	display: flex;
+	min-width: 0;
+	flex-direction: column;
+	gap: 4px;
+}
+
+.selectionContent strong {
+	color: #f5f6f7;
+	font-size: 13px;
+	font-weight: 600;
+}
+
+.selectionContent span {
+	color: #979fa9;
+	font-size: 11px;
+	line-height: 1.4;
+}
+
+.installState {
+	color: #8f97a1;
+	font-size: 11px;
+	white-space: nowrap;
+}
+
+.selectionRow.selected .installState {
+	color: #62b7ff;
+}
+
+.productSummary,
+.installInfo,
+.confirmPanel,
+.progressPanel,
+.completePanel {
+	border: 1px solid #34383f;
+	border-radius: 4px;
+	background: #202328;
+}
+
+.productSummary {
+	display: flex;
+	flex-direction: column;
+	gap: 5px;
+	margin-top: 18px;
+	padding: 14px 16px;
+}
+
+.productSummary strong {
+	font-size: 12px;
+	font-weight: 600;
+}
+
+.productSummary span {
+	color: #969ea8;
+	font-size: 11px;
+	line-height: 1.45;
+	word-break: break-word;
+}
+
+.formGroup {
+	max-width: 520px;
+}
+
+.fieldLabel {
+	display: block;
+	margin-bottom: 7px;
+	color: #d7dbe0;
+	font-size: 12px;
+	font-weight: 600;
+}
+
+.formGroup select {
+	width: 240px;
+	height: 34px;
+	padding: 0 9px;
+	border: 1px solid #42474f;
+	border-radius: 3px;
+	outline: none;
+	background: #15171a;
+	color: #f1f3f5;
+	font-size: 12px;
+}
+
+.formGroup select:focus {
+	border-color: #0187f8;
+}
+
+.checkboxRow {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin-top: 17px;
+	color: #c8cdd3;
+	font-size: 12px;
+}
+
+.checkboxRow input {
+	width: 15px;
+	height: 15px;
+	margin: 0;
+	accent-color: #0187f8;
+}
+
+.installInfo {
+	margin-top: 24px;
+	padding: 14px 16px;
+}
+
+.installInfo > div {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+}
+
+.installInfo > div + div {
+	margin-top: 14px;
+}
+
+.infoLabel {
+	color: #8f97a1;
+	font-size: 10px;
+	font-weight: 600;
+	letter-spacing: 0.04em;
+	text-transform: uppercase;
+}
+
+.installInfo strong {
+	color: #dce0e5;
+	font-size: 11px;
+	font-weight: 500;
+	line-height: 1.45;
+	word-break: break-all;
+}
+
+.confirmPanel {
+	max-width: 560px;
+	padding: 18px;
+}
+
+.confirmPanel p {
+	margin: 0 0 12px;
+	color: #c3c8ce;
+	font-size: 12px;
+	line-height: 1.55;
+}
+
+.confirmPanel p:last-of-type {
+	margin-bottom: 0;
+}
+
+.confirmPanel strong {
+	color: #ffffff;
+}
+
+.progressPanel {
+	position: relative;
+	max-width: 580px;
+	padding: 18px;
+}
+
+.progressPanel.error {
+	border-color: #6b3c43;
+	background: #25191c;
+}
+
+.progressMessage {
+	display: block;
+	margin-bottom: 13px;
+	color: #d5d9de;
+	font-size: 12px;
+	line-height: 1.45;
+}
+
+.progressPanel.error .progressMessage {
+	margin-bottom: 0;
+	color: #ffb2bc;
+}
+
+.progressTrack {
+	height: 18px;
+	overflow: hidden;
+	border: 1px solid #3b4047;
+	border-radius: 2px;
+	background: #111316;
+}
+
+.progressBar {
+	height: 100%;
+	background: #0187f8;
+	transition: width 160ms linear;
+}
+
+.progressPercent {
+	display: block;
+	margin-top: 8px;
+	color: #929aa4;
+	font-size: 11px;
+	text-align: right;
+}
+
+.completePanel {
+	display: flex;
+	max-width: 580px;
+	align-items: flex-start;
+	gap: 15px;
+	padding: 19px;
+}
+
+.completeIcon {
+	display: grid;
+	width: 34px;
+	height: 34px;
+	flex: 0 0 auto;
+	place-items: center;
+	border-radius: 50%;
+	background: #1f6842;
+	color: #ffffff;
+	font-size: 18px;
+	font-weight: 700;
+}
+
+.completePanel strong {
+	display: block;
+	margin-top: 1px;
+	color: #f5f6f7;
+	font-size: 13px;
+	font-weight: 600;
+}
+
+.completePanel p {
+	margin: 6px 0 0;
+	color: #9ca4ae;
+	font-size: 12px;
+	line-height: 1.5;
+}
+
+.wizardFooter {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 20px;
+	padding: 0 22px;
+	border-top: 1px solid #30343a;
+	background: #202328;
+}
+
+.footerLeft {
+	color: #777f89;
+	font-size: 10px;
+}
+
+.footerButtons {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+
+.button {
+	min-width: 84px;
+	height: 32px;
+	padding: 0 15px;
+	border: 1px solid transparent;
+	border-radius: 3px;
+	font-size: 12px;
+	font-weight: 500;
+	cursor: pointer;
+}
+
+.button:disabled {
+	cursor: default;
+	opacity: 0.5;
+}
+
+.button.primary {
+	border-color: #0187f8;
+	background: #0187f8;
+	color: #ffffff;
+}
+
+.button.primary:hover:not(:disabled) {
+	border-color: #1595ff;
+	background: #1595ff;
+}
+
+.button.secondary {
+	border-color: #454a52;
+	background: #2a2d32;
+	color: #e2e5e8;
+}
+
+.button.secondary:hover:not(:disabled) {
+	border-color: #565c65;
+	background: #32363c;
+}
+
+.button.danger {
+	border-color: #9a4450;
+	background: #8b3542;
+	color: #ffffff;
+}
+
+.button.danger:hover:not(:disabled) {
+	border-color: #b7505e;
+	background: #a43e4d;
+}
+
+@media (max-width: 680px) {
+	.wizardTitle,
+	.wizardBody {
+		padding-right: 24px;
+		padding-left: 24px;
+	}
+
+	.selectionRow {
+		grid-template-columns: 18px 1fr;
+	}
+
+	.installState {
+		grid-column: 2;
+	}
+}
+
+h1 {
+	font-weight: 600;
+}
+
+strong {
+	font-weight: 600;
+}
+
+body,
+button,
+select,
+input {
+	font-weight: 400;
+}
+
+body {
+	font-size: 13px;
+	font-weight: 400;
+}
+
+h1 {
+	font-size: 19px;
+	font-weight: 600;
+	letter-spacing: -0.01em;
+}
+
+button {
+	font-size: 12px;
+	font-weight: 500;
+}
