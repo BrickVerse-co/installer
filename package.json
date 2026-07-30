@@ -1,7 +1,7 @@
 {
   "name": "brickverse-installer",
   "version": "1.0.3",
-  "description": "Cross-platform installer and updater for BrickVerse Client and Creator.",
+  "description": "Cross-platform installer and updater for the BrickVerse Client and Creator.",
   "main": "dist/main/main.js",
   "author": {
     "name": "Meta Games LLC",
