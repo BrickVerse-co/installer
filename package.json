@@ -135,9 +135,9 @@
       "vendor": "Meta Games LLC",
       "synopsis": "Installer for BrickVerse Client and Creator",
       "description": "Installs and updates BrickVerse Client and BrickVerse Creator.",
-      "desktopName": "BrickVerse Installer",
       "syncDesktopName": true,
       "artifactName": "BrickVerse-Installer-${version}-${arch}.${ext}"
     }
-  }
+  },
+  "desktopName": "gg.brickverse.installer.desktop"
 }
