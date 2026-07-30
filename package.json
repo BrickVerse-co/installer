@@ -3,7 +3,11 @@
   "version": "1.0.1",
   "description": "Cross-platform installer and updater for BrickVerse Client and Creator.",
   "main": "dist/main/main.js",
-  "author": "Meta Games LLC",
+  "author": {
+    "name": "Meta Games LLC",
+    "email": "support@brickverse.gg",
+    "url": "https://brickverse.gg"
+  },
   "license": "MIT",
   "private": true,
   "scripts": {
