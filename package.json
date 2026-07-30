@@ -16,11 +16,11 @@
     "build": "npm run clean && tsc && vite build",
     "dev": "concurrently -k \"vite\" \"tsc -w -p tsconfig.main.json\" \"wait-on tcp:5173 file:dist/main/main.js && cross-env VITE_DEV_SERVER_URL=http://localhost:5173 electron .\"",
     "start": "electron .",
-    "pack": "npm run build && electron-builder --dir",
-    "dist": "npm run build && electron-builder",
-    "dist:win": "npm run build && electron-builder --win nsis",
-    "dist:mac": "npm run build && electron-builder --mac dmg zip",
-    "dist:linux": "npm run build && electron-builder --linux AppImage deb",
+    "pack": "npm run build && electron-builder --dir --publish never",
+    "dist": "npm run build && electron-builder --publish never",
+    "dist:win": "npm run build && electron-builder --win nsis --publish never",
+    "dist:mac": "npm run build && electron-builder --mac dmg zip --publish never",
+    "dist:linux": "npm run build && electron-builder --linux AppImage deb --publish never",
     "release": "npm run build && electron-builder --publish always"
   },
   "dependencies": {
@@ -70,8 +70,7 @@
         {
           "target": "nsis",
           "arch": [
-            "x64",
-            "arm64"
+            "x64"
           ]
         }
       ],
@@ -107,7 +106,8 @@
       ],
       "category": "public.app-category.utilities",
       "artifactName": "BrickVerse-Installer-${version}-${arch}.${ext}",
-      "hardenedRuntime": true,
+      "identity": null,
+      "hardenedRuntime": false,
       "gatekeeperAssess": false
     },
     "dmg": {
@@ -131,6 +131,12 @@
         }
       ],
       "category": "Utility",
+      "maintainer": "Meta Games LLC <support@brickverse.gg>",
+      "vendor": "Meta Games LLC",
+      "synopsis": "Installer for BrickVerse Client and Creator",
+      "description": "Installs and updates BrickVerse Client and BrickVerse Creator.",
+      "desktopName": "BrickVerse Installer",
+      "syncDesktopName": true,
       "artifactName": "BrickVerse-Installer-${version}-${arch}.${ext}"
     }
   }

@@ -8,13 +8,15 @@ on:
 
 permissions:
   contents: write
-  id-token: write
 
 jobs:
   build-windows:
     name: Build Windows
     runs-on: windows-2022
     environment: release
+    permissions:
+      contents: read
+      id-token: write
 
     steps:
       - name: Checkout
@@ -36,8 +38,11 @@ jobs:
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
+      - name: Build application files
+        run: npm run build
+
       - name: Build unpacked Windows application
-        run: npm run dist:win -- --dir
+        run: npx electron-builder --win --x64 --dir --publish never
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
 
@@ -45,38 +50,19 @@ jobs:
         id: windows-app
         shell: pwsh
         run: |
-          $candidateFolders = @(
-            "release\win-unpacked",
-            "release\win-ia32-unpacked",
-            "release\win-arm64-unpacked"
-          )
-
-          $appFolder = $candidateFolders |
-            Where-Object { Test-Path $_ } |
+          $appFolder = Get-ChildItem -Path "release" -Directory -Recurse |
+            Where-Object { $_.Name -eq "win-unpacked" } |
             Select-Object -First 1
-
-          if (-not $appFolder) {
-            $foundFolder = Get-ChildItem -Path "release" -Directory -Recurse |
-              Where-Object { $_.Name -like "win*-unpacked" } |
-              Select-Object -First 1
-
-            if ($foundFolder) {
-              $appFolder = $foundFolder.FullName
-            }
-          }
 
           if (-not $appFolder) {
             Write-Host "Contents of release:"
             Get-ChildItem -Path "release" -Recurse |
               ForEach-Object { Write-Host $_.FullName }
-
-            throw "Could not locate the unpacked Windows application."
+            throw "Could not locate release\\win-unpacked."
           }
 
-          $resolvedPath = (Resolve-Path $appFolder).Path
-          "path=$resolvedPath" >> $env:GITHUB_OUTPUT
-
-          Write-Host "Using unpacked application: $resolvedPath"
+          "path=$($appFolder.FullName)" >> $env:GITHUB_OUTPUT
+          Write-Host "Using unpacked application: $($appFolder.FullName)"
 
       - name: Locate main application executable
         id: windows-executable
@@ -84,26 +70,18 @@ jobs:
         run: |
           $appFolder = "${{ steps.windows-app.outputs.path }}"
 
-          # Prefer the executable whose name contains BrickVerse.
           $executable = Get-ChildItem -Path $appFolder -File -Filter "*.exe" |
             Where-Object {
               $_.Name -like "*BrickVerse*" -and
-              $_.Name -notin @(
-                "chrome_crashpad_handler.exe",
-                "elevate.exe"
-              )
+              $_.Name -notin @("chrome_crashpad_handler.exe", "elevate.exe")
             } |
+            Sort-Object Length -Descending |
             Select-Object -First 1
 
-          # Fall back to the largest top-level executable, which is normally
-          # the main Electron application executable.
           if (-not $executable) {
             $executable = Get-ChildItem -Path $appFolder -File -Filter "*.exe" |
               Where-Object {
-                $_.Name -notin @(
-                  "chrome_crashpad_handler.exe",
-                  "elevate.exe"
-                )
+                $_.Name -notin @("chrome_crashpad_handler.exe", "elevate.exe")
               } |
               Sort-Object Length -Descending |
               Select-Object -First 1
@@ -114,7 +92,7 @@ jobs:
           }
 
           "path=$($executable.FullName)" >> $env:GITHUB_OUTPUT
-          Write-Host "Main application executable: $($executable.FullName)"
+          Write-Host "Main executable: $($executable.FullName)"
 
       - name: Sign main Windows application
         uses: azure/artifact-signing-action@v2
@@ -122,13 +100,10 @@ jobs:
           endpoint: ${{ secrets.AZURE_ARTIFACT_SIGNING_ENDPOINT }}
           signing-account-name: ${{ secrets.AZURE_ARTIFACT_SIGNING_ACCOUNT_NAME }}
           certificate-profile-name: ${{ secrets.AZURE_ARTIFACT_SIGNING_PROFILE_NAME }}
-
           files: ${{ steps.windows-executable.outputs.path }}
-
           file-digest: SHA256
           timestamp-rfc3161: http://timestamp.acs.microsoft.com
           timestamp-digest: SHA256
-
           description: BrickVerse Installer
           description-url: https://brickverse.gg
 
@@ -150,105 +125,74 @@ jobs:
         shell: pwsh
         run: |
           npx electron-builder `
-            --win `
+            --win nsis `
+            --x64 `
             --prepackaged "${{ steps.windows-app.outputs.path }}" `
             --publish never
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
 
-      - name: Locate final Windows packages
-        id: windows-installers
+      - name: Locate final Windows installer
+        id: windows-installer
         shell: pwsh
         run: |
-          $files = Get-ChildItem -Path "release" -File |
-            Where-Object {
-              $_.Extension -in @(".exe", ".msi")
-            }
+          $installer = Get-ChildItem -Path "release" -File -Filter "*.exe" |
+            Where-Object { $_.Name -notlike "*.__uninstaller.exe" } |
+            Sort-Object LastWriteTime -Descending |
+            Select-Object -First 1
 
-          if (-not $files) {
+          if (-not $installer) {
             Write-Host "Contents of release:"
             Get-ChildItem -Path "release" -Recurse |
               ForEach-Object { Write-Host $_.FullName }
-
-            throw "No Windows installer package was generated."
+            throw "No final Windows installer was generated."
           }
 
-          "files<<EOF" >> $env:GITHUB_OUTPUT
-          $files.FullName >> $env:GITHUB_OUTPUT
-          "EOF" >> $env:GITHUB_OUTPUT
+          "path=$($installer.FullName)" >> $env:GITHUB_OUTPUT
+          Write-Host "Final installer: $($installer.FullName)"
 
-          Write-Host "Windows packages:"
-          $files | ForEach-Object {
-            Write-Host " - $($_.FullName)"
-          }
-
-      - name: Sign final Windows packages
+      - name: Sign final Windows installer
         uses: azure/artifact-signing-action@v2
         with:
           endpoint: ${{ secrets.AZURE_ARTIFACT_SIGNING_ENDPOINT }}
           signing-account-name: ${{ secrets.AZURE_ARTIFACT_SIGNING_ACCOUNT_NAME }}
           certificate-profile-name: ${{ secrets.AZURE_ARTIFACT_SIGNING_PROFILE_NAME }}
-
-          files: ${{ steps.windows-installers.outputs.files }}
-
+          files: ${{ steps.windows-installer.outputs.path }}
           file-digest: SHA256
           timestamp-rfc3161: http://timestamp.acs.microsoft.com
           timestamp-digest: SHA256
-
           description: BrickVerse Installer
           description-url: https://brickverse.gg
 
-      - name: Verify final Windows signatures
+      - name: Verify final Windows installer signature
         shell: pwsh
         run: |
-          $files = @"
-          ${{ steps.windows-installers.outputs.files }}
-          "@ -split "`r?`n" |
-            ForEach-Object { $_.Trim() } |
-            Where-Object { $_ }
+          $file = "${{ steps.windows-installer.outputs.path }}"
+          $signature = Get-AuthenticodeSignature -FilePath $file
 
-          foreach ($file in $files) {
-            $signature = Get-AuthenticodeSignature -FilePath $file
+          Write-Host "File: $file"
+          Write-Host "Status: $($signature.Status)"
+          Write-Host "Signer: $($signature.SignerCertificate.Subject)"
 
-            Write-Host "File: $file"
-            Write-Host "Status: $($signature.Status)"
-            Write-Host "Signer: $($signature.SignerCertificate.Subject)"
-
-            if ($signature.Status -ne "Valid") {
-              throw "Invalid signature on $file: $($signature.Status)"
-            }
+          if ($signature.Status -ne "Valid") {
+            throw "Final installer signature is invalid: $($signature.Status)"
           }
 
-      - name: Upload Windows release artifacts
+      - name: Upload Windows artifacts
         uses: actions/upload-artifact@v4
         with:
           name: installer-windows
           path: |
             release/*.exe
-            release/*.msi
             release/*.yml
             release/*.blockmap
           if-no-files-found: error
 
-  build-unix:
-    name: Build ${{ matrix.name }}
-
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - name: macOS
-            os: macos-latest
-            command: dist:mac
-            artifact: installer-macos
-
-          - name: Linux
-            os: ubuntu-latest
-            command: dist:linux
-            artifact: installer-linux
-
-    runs-on: ${{ matrix.os }}
+  build-macos:
+    name: Build macOS
+    runs-on: macos-latest
+    permissions:
+      contents: read
 
     steps:
       - name: Checkout
@@ -263,29 +207,51 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Build application
-        run: npm run ${{ matrix.command }} -- --publish never
+      - name: Build macOS application
+        run: npm run dist:mac
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-          # Keep these only when you have a real Apple Developer certificate.
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
 
-      - name: Upload build artifacts
+      - name: Upload macOS artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.artifact }}
+          name: installer-macos
           path: |
             release/*.dmg
-            release/*.pkg
             release/*.zip
+            release/*.yml
+            release/*.blockmap
+          if-no-files-found: error
+
+  build-linux:
+    name: Build Linux
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build Linux application
+        run: npm run dist:linux
+
+      - name: Upload Linux artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: installer-linux
+          path: |
             release/*.AppImage
             release/*.deb
-            release/*.rpm
-            release/*.tar.gz
             release/*.yml
             release/*.blockmap
           if-no-files-found: error
@@ -294,9 +260,11 @@ jobs:
     name: Publish Release
     needs:
       - build-windows
-      - build-unix
-
+      - build-macos
+      - build-linux
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
 
     steps:
       - name: Checkout
@@ -335,5 +303,11 @@ jobs:
               --generate-notes
           fi
 
-          find release-assets -type f -print0 |
-            xargs -0 gh release upload "$RELEASE_TAG" --clobber
+          mapfile -d '' files < <(find release-assets -type f -print0)
+
+          if (( ${#files[@]} == 0 )); then
+            echo "No release artifacts were downloaded."
+            exit 1
+          fi
+
+          gh release upload "$RELEASE_TAG" "${files[@]}" --clobber
