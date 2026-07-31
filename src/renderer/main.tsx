@@ -6,7 +6,8 @@ import type {
 	ProgressEvent,
 	ReleaseBranch,
 } from "../main/types";
-import "./style.css";
+import "../assets/style.css";
+import logoUrl from "../assets/logo.png";
 
 type WizardStep = "welcome" | "options" | "progress" | "complete";
 
@@ -362,7 +363,7 @@ function App(): React.JSX.Element {
 			<div className="wizardHeader">
 				<img
 					className="wizardLogo"
-					src="/logo.png"
+					src={logoUrl}
 					alt="BrickVerse Logo"
 					draggable={false}
 				/>
