@@ -1,6 +1,6 @@
 {
 	"name": "brickverse-installer",
-	"version": "1.0.4",
+	"version": "1.0.5",
 	"description": "Cross-platform installer and updater for the BrickVerse Client and Creator.",
 	"main": "dist/main/main.js",
 	"desktopName": "gg.brickverse.installer.desktop",
