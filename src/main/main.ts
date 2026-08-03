@@ -12,9 +12,11 @@ let operationRunning = false;
 async function ensureProductCurrent(target: BrickVerseApp): Promise<InstallState> {
   let state = await getInstallState(target);
   if (!state.installed || !state.executablePath) throw new Error(`${target === "creator" ? "BrickVerse Creator" : "BrickVerse"} is not installed.`);
+ 
   if (state.autoUpdate !== false) {
     const branch = state.branch ?? "main";
 		const binary = await resolveBinary(target, branch);
+
 		if (!state.version || Date.parse(binary.createdAt) > Date.parse(state.version)) {
 			if (operationRunning) throw new Error("BrickVerse is already being updated.");
 			operationRunning = true;
