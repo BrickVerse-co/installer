@@ -242,7 +242,7 @@ jobs:
 
           executable_name="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$app_bundle/Contents/Info.plist")"
           executable="$app_bundle/Contents/MacOS/$executable_name"
-          lipo -verify_arch x86_64 arm64 "$executable"
+          lipo "$executable" -verify_arch x86_64 arm64
           file "$executable"
 
       - name: Upload macOS artifacts
@@ -295,6 +295,7 @@ jobs:
       - build-windows
       - build-macos
       - build-linux
+    if: ${{ always() }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
