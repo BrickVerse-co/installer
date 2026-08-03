@@ -212,6 +212,39 @@ jobs:
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
 
+      - name: Validate macOS artifacts
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          shopt -s nullglob
+          dmgs=(release/*-universal.dmg)
+          zips=(release/*-universal.zip)
+
+          if (( ${#dmgs[@]} != 1 || ${#zips[@]} != 1 )); then
+            echo "Expected exactly one universal DMG and one universal ZIP."
+            find release -maxdepth 2 -type f -print
+            exit 1
+          fi
+
+          hdiutil verify "${dmgs[0]}"
+          unzip -t "${zips[0]}"
+
+          extract_dir="$(mktemp -d)"
+          trap 'rm -rf "$extract_dir"' EXIT
+          ditto -x -k "${zips[0]}" "$extract_dir"
+
+          app_bundle="$(find "$extract_dir" -maxdepth 2 -type d -name '*.app' -print -quit)"
+          if [[ -z "$app_bundle" ]]; then
+            echo "The macOS ZIP does not contain an application bundle."
+            exit 1
+          fi
+
+          executable_name="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$app_bundle/Contents/Info.plist")"
+          executable="$app_bundle/Contents/MacOS/$executable_name"
+          lipo -verify_arch x86_64 arm64 "$executable"
+          file "$executable"
+
       - name: Upload macOS artifacts
         uses: actions/upload-artifact@v4
         with:
