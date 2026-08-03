@@ -1,7 +1,12 @@
 # BrickVerse Installer
 
-A single Electron/TypeScript application that installs or removes the BrickVerse
-Game Client and BrickVerse Creator on Windows, macOS, and Linux.
+A single Electron/TypeScript application that installs, updates, repairs, launches,
+or removes the BrickVerse Game Client and BrickVerse Creator on Windows, macOS,
+and Linux. Electron bundles the required runtime; users do not need Node.js.
+
+The installer is also the installed `brickverse://` protocol handler and file
+handler for BrickVerse projects, worlds, models, animations, and addons. Product
+shortcuts route through it so an enabled product update is applied before launch.
 
 ## Install directories
 
@@ -13,6 +18,15 @@ Game Client and BrickVerse Creator on Windows, macOS, and Linux.
   `~/.local/share/brickverse/creator`
 
 These locations are writable without administrator access.
+The setup UI can select a different location for either product. That location is
+stored with the product metadata and is used by launching, updating, and removal.
+
+## Product updates
+
+Updates are installed as a complete staged replacement. The replacement is
+downloaded, extracted, and validated before the current directory is renamed. If
+activation fails, the previous directory is restored. Reinstalling first is not
+required, and uninstalling before an update is no longer supported or necessary.
 
 ## Development
 

@@ -4,6 +4,7 @@ import type { BrickVerseApp, InstallRequest, ProgressEvent } from "./types";
 contextBridge.exposeInMainWorld("brickverse", {
   platform: process.platform,
   getState: (target: BrickVerseApp) => ipcRenderer.invoke("installer:get-state", target),
+	chooseDirectory: (current?: string) => ipcRenderer.invoke("installer:choose-directory", current),
   install: (request: InstallRequest) => ipcRenderer.invoke("installer:install", request),
   uninstall: (target: BrickVerseApp) => ipcRenderer.invoke("installer:uninstall", target),
   launch: (target: BrickVerseApp) => ipcRenderer.invoke("installer:launch", target),

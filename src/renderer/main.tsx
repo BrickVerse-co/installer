@@ -35,6 +35,9 @@ function App(): React.JSX.Element {
 	const [selected, setSelected] = useState<BrickVerseApp>("client");
 	const [branch, setBranch] = useState<ReleaseBranch>("main");
 	const [createShortcut, setCreateShortcut] = useState(true);
+	const [createStartMenuShortcut, setCreateStartMenuShortcut] = useState(true);
+	const [autoUpdate, setAutoUpdate] = useState(true);
+	const [customInstallDirectory, setCustomInstallDirectory] = useState("");
 	const [states, setStates] = useState<
 		Record<BrickVerseApp, InstallState | null>
 	>({
@@ -43,7 +46,7 @@ function App(): React.JSX.Element {
 	});
 	const [progress, setProgress] = useState<ProgressEvent | null>(null);
 	const [busy, setBusy] = useState(false);
-	const [operation, setOperation] = useState<"install" | "uninstall">(
+	const [operation, setOperation] = useState<"install" | "update" | "uninstall">(
 		"install",
 	);
 	const [version, setVersion] = useState("");
@@ -82,7 +85,10 @@ function App(): React.JSX.Element {
 	}, []);
 
 	function beginConfiguration(): void {
-		setOperation(isInstalled ? "uninstall" : "install");
+		setOperation(isInstalled ? "update" : "install");
+		setCustomInstallDirectory(selectedState?.installDirectory ?? "");
+		setAutoUpdate(selectedState?.autoUpdate ?? true);
+		setBranch(selectedState?.branch ?? "main");
 		setProgress(null);
 		setStep("options");
 	}
@@ -91,20 +97,23 @@ function App(): React.JSX.Element {
 		setBusy(true);
 		setStep("progress");
 		setProgress({
-			phase: operation === "install" ? "checking" : "uninstalling",
+			phase: operation !== "uninstall" ? "checking" : "uninstalling",
 			percent: 0,
 			message:
-				operation === "install"
+				operation !== "uninstall"
 					? "Preparing installation..."
 					: "Preparing uninstall...",
 		});
 
 		try {
-			if (operation === "install") {
+			if (operation !== "uninstall") {
 				const installed = await window.brickverse.install({
 					app: selected,
 					branch,
 					createDesktopShortcut: createShortcut,
+					createStartMenuShortcut,
+					installDirectory: customInstallDirectory,
+					autoUpdate,
 				});
 
 				setStates((current) => ({
@@ -141,7 +150,7 @@ function App(): React.JSX.Element {
 					<div className="wizardTitle">
 						<h1>BrickVerse Setup</h1>
 						<p>
-							This wizard will install or remove BrickVerse applications from
+							Install, update, repair, or remove BrickVerse applications from
 							your computer.
 						</p>
 					</div>
@@ -201,19 +210,19 @@ function App(): React.JSX.Element {
 				<>
 					<div className="wizardTitle">
 						<h1>
-							{operation === "install"
-								? `Install ${selectedProduct.title}`
+							{operation !== "uninstall"
+								? `${operation === "update" ? "Update or repair" : "Install"} ${selectedProduct.title}`
 								: `Uninstall ${selectedProduct.title}`}
 						</h1>
 						<p>
-							{operation === "install"
+							{operation !== "uninstall"
 								? "Choose your installation options."
 								: "Confirm that you want to remove this application."}
 						</p>
 					</div>
 
 					<div className="wizardBody">
-						{operation === "install" ? (
+						{operation !== "uninstall" ? (
 							<div className="formGroup">
 								<label className="fieldLabel" htmlFor="branch">
 									Release channel
@@ -230,6 +239,15 @@ function App(): React.JSX.Element {
 									<option value="beta">Beta</option>
 								</select>
 
+								<label className="fieldLabel locationLabel" htmlFor="installLocation">Install location</label>
+								<div className="locationRow">
+									<input id="installLocation" value={customInstallDirectory} onChange={(event) => setCustomInstallDirectory(event.target.value)} />
+									<button className="button secondary" type="button" onClick={async () => {
+										const directory = await window.brickverse.chooseDirectory(customInstallDirectory);
+										if (directory) setCustomInstallDirectory(directory);
+									}}>Browse...</button>
+								</div>
+
 								<label className="checkboxRow">
 									<input
 										type="checkbox"
@@ -241,6 +259,16 @@ function App(): React.JSX.Element {
 									<span>Create a desktop shortcut</span>
 								</label>
 
+								<label className="checkboxRow">
+									<input type="checkbox" checked={createStartMenuShortcut} onChange={(event) => setCreateStartMenuShortcut(event.target.checked)} />
+									<span>Create an application menu shortcut</span>
+								</label>
+
+								<label className="checkboxRow">
+									<input type="checkbox" checked={autoUpdate} onChange={(event) => setAutoUpdate(event.target.checked)} />
+									<span>Automatically update before launching</span>
+								</label>
+
 								<div className="installInfo">
 									<div>
 										<span className="infoLabel">Application</span>
@@ -249,7 +277,7 @@ function App(): React.JSX.Element {
 
 									<div>
 										<span className="infoLabel">Install location</span>
-										<strong>{selectedState?.installDirectory}</strong>
+										<strong>{customInstallDirectory}</strong>
 									</div>
 								</div>
 							</div>
@@ -287,8 +315,8 @@ function App(): React.JSX.Element {
 						<h1>
 							{hasError
 								? "Setup could not continue"
-								: operation === "install"
-									? `Installing ${selectedProduct.title}`
+								: operation !== "uninstall"
+									? `${operation === "update" ? "Updating" : "Installing"} ${selectedProduct.title}`
 									: `Uninstalling ${selectedProduct.title}`}
 						</h1>
 						<p>
@@ -328,8 +356,8 @@ function App(): React.JSX.Element {
 			<>
 				<div className="wizardTitle">
 					<h1>
-						{operation === "install"
-							? "Installation complete"
+						{operation !== "uninstall"
+							? operation === "update" ? "Update complete" : "Installation complete"
 							: "Uninstall complete"}
 					</h1>
 					<p>BrickVerse Setup has finished.</p>
@@ -341,13 +369,13 @@ function App(): React.JSX.Element {
 
 						<div>
 							<strong>
-								{operation === "install"
-									? `${selectedProduct.title} was installed successfully.`
+								{operation !== "uninstall"
+									? `${selectedProduct.title} was ${operation === "update" ? "updated" : "installed"} successfully.`
 									: `${selectedProduct.title} was removed successfully.`}
 							</strong>
 
 							<p>
-								{operation === "install"
+								{operation !== "uninstall"
 									? "You can launch it now or close this setup wizard."
 									: "Click Finish to close BrickVerse Setup."}
 							</p>
@@ -415,8 +443,11 @@ function App(): React.JSX.Element {
 								}`}
 								onClick={() => void runOperation()}
 							>
-								{operation === "install" ? "Install" : "Uninstall"}
+								{operation === "install" ? "Install" : operation === "update" ? "Update / Repair" : "Uninstall"}
 							</button>
+							{operation === "update" && (
+								<button className="button danger" onClick={() => setOperation("uninstall")}>Uninstall...</button>
+							)}
 						</>
 					)}
 
@@ -441,7 +472,7 @@ function App(): React.JSX.Element {
 						</button>
 					)}
 
-					{step === "complete" && operation === "install" && (
+					{step === "complete" && operation !== "uninstall" && (
 						<>
 							<button
 								className="button secondary"

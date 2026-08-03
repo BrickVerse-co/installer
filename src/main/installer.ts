@@ -7,142 +7,143 @@ import { createShortcut, installDirectory, locateExecutable, metadataPath, produ
 import { downloadFile, resolveBinary } from "./binaries";
 
 async function exists(file: string): Promise<boolean> {
-  try { await fs.access(file); return true; } catch { return false; }
+	try { await fs.access(file); return true; } catch { return false; }
 }
 
 async function writeMetadata(target: BrickVerseApp, data: InstallState): Promise<void> {
-  const file = metadataPath(target);
-  await fs.mkdir(path.dirname(file), { recursive: true });
-  await fs.writeFile(file, JSON.stringify(data, null, 2), "utf8");
+	const file = metadataPath(target);
+	await fs.mkdir(path.dirname(file), { recursive: true });
+	await fs.writeFile(file, JSON.stringify(data, null, 2), "utf8");
 }
 
 export async function getInstallState(target: BrickVerseApp): Promise<InstallState> {
-  const directory = installDirectory(target);
-  let metadata: Partial<InstallState> = {};
-  try {
-    metadata = JSON.parse(await fs.readFile(metadataPath(target), "utf8")) as Partial<InstallState>;
-  } catch {
-    // Metadata may not exist for older/manual installs.
-  }
-
-  return {
-    installed: await exists(directory),
-    installDirectory: directory,
-    executablePath: metadata.executablePath,
-    version: metadata.version
-  };
+	let metadata: Partial<InstallState> = {};
+	try {
+		metadata = JSON.parse(await fs.readFile(metadataPath(target), "utf8")) as Partial<InstallState>;
+	} catch {
+		// Metadata may not exist for older/manual installs.
+	}
+	const directory = installDirectory(target, metadata.installDirectory);
+	return {
+		installed: await exists(directory),
+		installDirectory: directory,
+		executablePath: metadata.executablePath,
+		version: metadata.version,
+		branch: metadata.branch,
+		autoUpdate: metadata.autoUpdate ?? true,
+	};
 }
 
 async function extractZip(zipPath: string, staging: string, onProgress: (event: ProgressEvent) => void): Promise<void> {
-  onProgress({ phase: "extracting", percent: 0, message: "Reading package…" });
-  const zip = new AdmZip(zipPath);
-  const entries = zip.getEntries();
-  const total = Math.max(entries.length, 1);
+	onProgress({ phase: "extracting", percent: 0, message: "Reading package..." });
+	const entries = new AdmZip(zipPath).getEntries();
+	const total = Math.max(entries.length, 1);
+	await fs.mkdir(staging, { recursive: true });
 
-  await fs.mkdir(staging, { recursive: true });
-
-  for (let index = 0; index < entries.length; index++) {
-    const entry = entries[index];
-    const normalized = path.normalize(entry.entryName);
-    if (normalized.startsWith("..") || path.isAbsolute(normalized)) {
-      throw new Error(`Unsafe path in ZIP package: ${entry.entryName}`);
-    }
-
-    const destination = path.join(staging, normalized);
-    if (entry.isDirectory) {
-      await fs.mkdir(destination, { recursive: true });
-    } else {
-      await fs.mkdir(path.dirname(destination), { recursive: true });
-      await fs.writeFile(destination, entry.getData());
-      if (process.platform !== "win32" && (destination.endsWith(".x86_64") || destination.includes("/Contents/MacOS/"))) {
-        await fs.chmod(destination, 0o755);
-      }
-    }
-
-    const percent = Math.round(((index + 1) / total) * 100);
-    onProgress({ phase: "extracting", percent, message: `Extracting… ${percent}%` });
-  }
+	for (let index = 0; index < entries.length; index++) {
+		const entry = entries[index];
+		const normalized = path.normalize(entry.entryName);
+		if (normalized.startsWith("..") || path.isAbsolute(normalized)) {
+			throw new Error(`Unsafe path in ZIP package: ${entry.entryName}`);
+		}
+		const destination = path.join(staging, normalized);
+		if (entry.isDirectory) {
+			await fs.mkdir(destination, { recursive: true });
+		} else {
+			await fs.mkdir(path.dirname(destination), { recursive: true });
+			await fs.writeFile(destination, entry.getData());
+			if (process.platform !== "win32" && (destination.endsWith(".x86_64") || destination.includes("/Contents/MacOS/"))) {
+				await fs.chmod(destination, 0o755);
+			}
+		}
+		onProgress({ phase: "extracting", percent: Math.round(((index + 1) / total) * 100), message: `Extracting... ${Math.round(((index + 1) / total) * 100)}%` });
+	}
 }
 
 async function normalizeExtractedRoot(staging: string): Promise<string> {
-  const entries = await fs.readdir(staging, { withFileTypes: true });
-  if (entries.length === 1 && entries[0].isDirectory()) {
-    return path.join(staging, entries[0].name);
-  }
-  return staging;
+	const entries = await fs.readdir(staging, { withFileTypes: true });
+	return entries.length === 1 && entries[0].isDirectory() ? path.join(staging, entries[0].name) : staging;
 }
 
-export async function installProduct(
-  request: InstallRequest,
-  onProgress: (event: ProgressEvent) => void
-): Promise<InstallState> {
-  const name = productName(request.app);
-  const destination = installDirectory(request.app);
-  const work = await fs.mkdtemp(path.join(os.tmpdir(), `brickverse-${request.app}-`));
-  const archive = path.join(work, `${request.app}.zip`);
-  const staging = path.join(work, "staging");
+export async function installProduct(request: InstallRequest, onProgress: (event: ProgressEvent) => void): Promise<InstallState> {
+	const name = productName(request.app);
+	const previous = await getInstallState(request.app);
+	const destination = installDirectory(request.app, request.installDirectory || previous.installDirectory);
+	const work = await fs.mkdtemp(path.join(os.tmpdir(), `brickverse-${request.app}-`));
+	const archive = path.join(work, `${request.app}.zip`);
+	const staging = path.join(work, "staging");
+	const replacement = `${destination}.replacement-${process.pid}-${Date.now()}`;
+	const backup = `${destination}.backup-${process.pid}-${Date.now()}`;
 
-  try {
-    onProgress({ phase: "checking", percent: 0, message: `Finding the latest ${name} build…` });
-    const binary = await resolveBinary(request.app, request.branch);
+	try {
+		onProgress({ phase: "checking", percent: 0, message: `Finding the latest ${name} build...` });
+		const binary = await resolveBinary(request.app, request.branch);
+		await downloadFile(binary.url, archive, onProgress);
+		await extractZip(archive, staging, onProgress);
+		const isUpdate = previous.installed;
+		onProgress({ phase: isUpdate ? "updating" : "installing", percent: 10, message: `${isUpdate ? "Updating" : "Installing"} ${name}...` });
+		await fs.mkdir(path.dirname(destination), { recursive: true });
 
-    await downloadFile(binary.url, archive, onProgress);
-    await extractZip(archive, staging, onProgress);
+		const extractedRoot = await normalizeExtractedRoot(staging);
+		await fs.rm(replacement, { recursive: true, force: true });
+		if (process.platform === "darwin") {
+			const bundles = (await fs.readdir(extractedRoot, { withFileTypes: true })).filter((entry) => entry.isDirectory() && entry.name.endsWith(".app"));
+			await fs.cp(bundles.length === 1 ? path.join(extractedRoot, bundles[0].name) : extractedRoot, replacement, { recursive: true });
+		} else {
+			await fs.cp(extractedRoot, replacement, { recursive: true });
+		}
 
-    onProgress({ phase: "installing", percent: 10, message: `Installing ${name}…` });
-    await fs.rm(destination, { recursive: true, force: true });
-    await fs.mkdir(path.dirname(destination), { recursive: true });
+		// Never remove a working install until the replacement is complete and runnable.
+		await locateExecutable(replacement, request.app);
+		try {
+			if (await exists(destination)) await fs.rename(destination, backup);
+			await fs.rename(replacement, destination);
+			await fs.rm(backup, { recursive: true, force: true });
+		} catch (error) {
+			await fs.rm(destination, { recursive: true, force: true });
+			if (await exists(backup)) await fs.rename(backup, destination);
+			throw error;
+		}
 
-    const extractedRoot = await normalizeExtractedRoot(staging);
+		const executablePath = await locateExecutable(destination, request.app);
+		if (request.createDesktopShortcut) {
+			onProgress({ phase: "shortcut", percent: 92, message: "Creating desktop shortcut..." });
+			await createShortcut(request.app, executablePath, destination, false);
+		}
+		if (request.createStartMenuShortcut) {
+			onProgress({ phase: "shortcut", percent: 95, message: "Creating application menu shortcut..." });
+			await createShortcut(request.app, executablePath, destination, true);
+		}
 
-    if (process.platform === "darwin") {
-      const appBundles = (await fs.readdir(extractedRoot, { withFileTypes: true }))
-        .filter((entry) => entry.isDirectory() && entry.name.endsWith(".app"));
-      const source = appBundles.length === 1 ? path.join(extractedRoot, appBundles[0].name) : extractedRoot;
-      await fs.cp(source, destination, { recursive: true });
-    } else {
-      await fs.cp(extractedRoot, destination, { recursive: true });
-    }
-
-    onProgress({ phase: "installing", percent: 85, message: "Locating executable…" });
-    const executablePath = await locateExecutable(destination, request.app);
-
-    if (request.createDesktopShortcut) {
-      onProgress({ phase: "shortcut", percent: 92, message: "Creating shortcut…" });
-      await createShortcut(request.app, executablePath);
-    }
-
-    const state: InstallState = {
-      installed: true,
-      installDirectory: destination,
-      executablePath,
-      version: binary.createdAt
-    };
-    await writeMetadata(request.app, state);
-
-    onProgress({ phase: "complete", percent: 100, message: `${name} is installed.` });
-    return state;
-  } finally {
-    await fs.rm(work, { recursive: true, force: true });
-  }
+		const state: InstallState = {
+			installed: true,
+			installDirectory: destination,
+			executablePath,
+			version: binary.createdAt,
+			branch: request.branch,
+			autoUpdate: request.autoUpdate,
+		};
+		await writeMetadata(request.app, state);
+		if (previous.installed && previous.installDirectory !== destination) {
+			await fs.rm(previous.installDirectory, { recursive: true, force: true });
+		}
+		onProgress({ phase: "complete", percent: 100, message: `${name} was ${isUpdate ? "updated" : "installed"}.` });
+		return state;
+	} finally {
+		await fs.rm(replacement, { recursive: true, force: true });
+		await fs.rm(work, { recursive: true, force: true });
+	}
 }
 
-export async function uninstallProduct(
-  target: BrickVerseApp,
-  onProgress: (event: ProgressEvent) => void
-): Promise<InstallState> {
-  const name = productName(target);
-  onProgress({ phase: "uninstalling", percent: 20, message: `Removing ${name}…` });
-  await fs.rm(installDirectory(target), { recursive: true, force: true });
-
-  onProgress({ phase: "uninstalling", percent: 70, message: "Removing shortcuts…" });
-  await removeShortcuts(target);
-  await fs.rm(metadataPath(target), { force: true });
-
-  const state: InstallState = {
-    installed: false,
-    installDirectory: installDirectory(target)
-  };
-  onProgress({ phase: "complete", percent: 100, message: `${name} was uninstalled.` });
-  return state;
+export async function uninstallProduct(target: BrickVerseApp, onProgress: (event: ProgressEvent) => void): Promise<InstallState> {
+	const name = productName(target);
+	const current = await getInstallState(target);
+	onProgress({ phase: "uninstalling", percent: 20, message: `Removing ${name}...` });
+	await fs.rm(current.installDirectory, { recursive: true, force: true });
+	onProgress({ phase: "uninstalling", percent: 70, message: "Removing shortcuts..." });
+	await removeShortcuts(target);
+	await fs.rm(metadataPath(target), { force: true });
+	const state: InstallState = { installed: false, installDirectory: current.installDirectory };
+	onProgress({ phase: "complete", percent: 100, message: `${name} was uninstalled.` });
+	return state;
 }

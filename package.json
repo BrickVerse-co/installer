@@ -1,6 +1,6 @@
 {
 	"name": "brickverse-installer",
-	"version": "1.0.5",
+	"version": "1.1.0",
 	"description": "Cross-platform installer and updater for the BrickVerse Client and Creator.",
 	"main": "dist/main/main.js",
 	"desktopName": "gg.brickverse.installer.desktop",
@@ -66,6 +66,16 @@
 			"repo": "installer",
 			"releaseType": "release"
 		},
+		"protocols": [
+			{ "name": "BrickVerse", "schemes": ["brickverse"] }
+		],
+		"fileAssociations": [
+			{ "ext": ["bvxl", "bvproject"], "name": "BrickVerse Project", "description": "BrickVerse Creator project", "role": "Editor" },
+			{ "ext": ["bvxw", "bvworld"], "name": "BrickVerse World", "description": "BrickVerse world", "role": "Editor" },
+			{ "ext": ["bvxm", "bvmodel", "model"], "name": "BrickVerse Model", "description": "BrickVerse model or prefab", "role": "Editor" },
+			{ "ext": "bvanim", "name": "BrickVerse Animation", "description": "BrickVerse animation", "role": "Editor" },
+			{ "ext": "bvaddon", "name": "BrickVerse Addon", "description": "BrickVerse Creator addon", "role": "Editor" }
+		],
 		"win": {
 			"icon": "build/icon.ico",
 			"target": [

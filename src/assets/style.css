@@ -243,6 +243,32 @@ button {
 	border-color: #0187f8;
 }
 
+.locationLabel {
+	margin-top: 18px;
+}
+
+.locationRow {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) auto;
+	gap: 8px;
+}
+
+.locationRow input {
+	min-width: 0;
+	height: 34px;
+	padding: 0 9px;
+	border: 1px solid #42474f;
+	border-radius: 3px;
+	outline: none;
+	background: #15171a;
+	color: #f1f3f5;
+	font-size: 12px;
+}
+
+.locationRow input:focus {
+	border-color: #0187f8;
+}
+
 .checkboxRow {
 	display: flex;
 	align-items: center;

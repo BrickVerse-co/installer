@@ -16,7 +16,8 @@ export function productName(target: BrickVerseApp): string {
   return target === "creator" ? "BrickVerse Creator" : "BrickVerse";
 }
 
-export function installDirectory(target: BrickVerseApp): string {
+export function installDirectory(target: BrickVerseApp, customDirectory?: string): string {
+	if (customDirectory?.trim()) return path.resolve(customDirectory.trim());
   const name = productName(target);
 
   if (process.platform === "win32") {
@@ -32,6 +33,10 @@ export function installDirectory(target: BrickVerseApp): string {
 
 export function metadataPath(target: BrickVerseApp): string {
   return path.join(app.getPath("userData"), "installed", `${target}.json`);
+}
+
+function startMenuDirectory(): string {
+	return path.join(process.env.APPDATA ?? app.getPath("appData"), "Microsoft", "Windows", "Start Menu", "Programs");
 }
 
 async function findFiles(root: string): Promise<string[]> {
@@ -80,14 +85,17 @@ export async function locateExecutable(root: string, target: BrickVerseApp): Pro
   return fallback;
 }
 
-export async function createShortcut(target: BrickVerseApp, executablePath: string): Promise<void> {
+export async function createShortcut(target: BrickVerseApp, executablePath: string, installRoot: string, startMenu = false): Promise<void> {
   const name = productName(target);
 
   if (process.platform === "win32") {
-    const shortcut = path.join(app.getPath("desktop"), `${name}.lnk`);
-    const success = shell.writeShortcutLink(shortcut, "create", {
-      target: executablePath,
-      cwd: path.dirname(executablePath),
+	const shortcutDirectory = startMenu ? startMenuDirectory() : app.getPath("desktop");
+	await fs.mkdir(shortcutDirectory, { recursive: true });
+	const shortcut = path.join(shortcutDirectory, `${name}.lnk`);
+	const success = shell.writeShortcutLink(shortcut, "create", {
+	  target: process.execPath,
+	  args: `brickverse://${target}`,
+	  cwd: path.dirname(process.execPath),
       description: `Launch ${name}`,
       icon: executablePath,
       iconIndex: 0
@@ -99,7 +107,7 @@ export async function createShortcut(target: BrickVerseApp, executablePath: stri
   if (process.platform === "darwin") {
     const shortcut = path.join(app.getPath("desktop"), `${name}.app`);
     await fs.rm(shortcut, { recursive: true, force: true });
-    await fs.symlink(installDirectory(target), shortcut, "dir");
+	await fs.symlink(installRoot, shortcut, "dir");
     return;
   }
 
@@ -110,8 +118,8 @@ export async function createShortcut(target: BrickVerseApp, executablePath: stri
     "[Desktop Entry]",
     "Type=Application",
     `Name=${name}`,
-    `Exec="${executablePath}"`,
-    `Path=${path.dirname(executablePath)}`,
+	`Exec="${process.execPath}" "brickverse://${target}"`,
+	`Path=${path.dirname(process.execPath)}`,
     "Terminal=false",
     "Categories=Game;",
     "StartupNotify=true",
@@ -133,7 +141,10 @@ export async function removeShortcuts(target: BrickVerseApp): Promise<void> {
   const name = productName(target);
   const paths =
     process.platform === "win32"
-      ? [path.join(app.getPath("desktop"), `${name}.lnk`)]
+      ? [
+		  path.join(app.getPath("desktop"), `${name}.lnk`),
+		  path.join(startMenuDirectory(), `${name}.lnk`),
+		]
       : process.platform === "darwin"
         ? [path.join(app.getPath("desktop"), `${name}.app`)]
         : [
