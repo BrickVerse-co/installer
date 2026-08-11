@@ -10,6 +10,12 @@ contextBridge.exposeInMainWorld("brickverse", {
   launch: (target: BrickVerseApp) => ipcRenderer.invoke("installer:launch", target),
   openFolder: (target: BrickVerseApp) => ipcRenderer.invoke("installer:open-folder", target),
   getVersion: () => ipcRenderer.invoke("installer:get-version"),
+  getRequestedProduct: () => ipcRenderer.invoke("installer:get-requested-product"),
+  onSelectProduct: (callback: (target: BrickVerseApp | null) => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, target: BrickVerseApp | null) => callback(target);
+    ipcRenderer.on("installer:select-product", listener);
+    return () => ipcRenderer.removeListener("installer:select-product", listener);
+  },
   onProgress: (callback: (event: ProgressEvent) => void) => {
     const listener = (_event: Electron.IpcRendererEvent, progress: ProgressEvent) => callback(progress);
     ipcRenderer.on("installer:progress", listener);

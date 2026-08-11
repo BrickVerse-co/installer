@@ -8,6 +8,8 @@ import { creatorFiles, parseProtocol, protocolUrls, spawnProduct } from "./proto
 
 let mainWindow: BrowserWindow | null = null;
 let operationRunning = false;
+let requestedInstallerProduct: BrickVerseApp | null = null;
+let installerWindowRequested = false;
 
 async function ensureProductCurrent(target: BrickVerseApp): Promise<InstallState> {
   let state = await getInstallState(target);
@@ -60,7 +62,12 @@ async function processLaunchArguments(argv: string[]): Promise<boolean> {
 	for (const rawUrl of protocolUrls(argv)) {
 		handled = true;
 		const request = parseProtocol(rawUrl);
-		if (request.target === "local") await launchLocalProduct(request.args);
+		if (request.target === "installer") {
+			installerWindowRequested = true;
+			requestedInstallerProduct = request.args[0] === "creator" ? "creator" : request.args[0] === "client" ? "client" : null;
+			if (mainWindow) { mainWindow.show(); mainWindow.focus(); mainWindow.webContents.send("installer:select-product", requestedInstallerProduct); }
+		}
+		else if (request.target === "local") await launchLocalProduct(request.args);
 		else await launchProduct(request.target, request.args);
 	}
 
@@ -141,8 +148,8 @@ app.whenReady().then(() => {
   app.setAppUserModelId("gg.brickverse.installer");
   app.setAsDefaultProtocolClient("brickverse");
   void processLaunchArguments(process.argv).then((handled) => {
-    if (!handled) createWindow();
-    else app.quit();
+	if (!handled || installerWindowRequested) { if (!mainWindow) createWindow(); }
+	else app.quit();
   }).catch((error) => {
     dialog.showErrorBox("Unable to launch BrickVerse", error instanceof Error ? error.message : String(error));
     createWindow();
@@ -173,6 +180,7 @@ app.on("window-all-closed", () => {
 });
 
 ipcMain.handle("installer:get-version", () => app.getVersion());
+ipcMain.handle("installer:get-requested-product", () => requestedInstallerProduct);
 ipcMain.handle("installer:get-state", (_event, target: BrickVerseApp) => getInstallState(target));
 ipcMain.handle("installer:choose-directory", async (_event, current?: string) => {
   const options = {

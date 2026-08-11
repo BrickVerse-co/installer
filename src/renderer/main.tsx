@@ -72,6 +72,12 @@ function App(): React.JSX.Element {
 
 	useEffect(() => {
 		void refreshStates();
+		void window.brickverse.getRequestedProduct().then((target) => {
+			if (target) setSelected(target);
+		});
+		const removeSelection = window.brickverse.onSelectProduct((target) => {
+			if (target) { setSelected(target); setStep("welcome"); }
+		});
 
 		const removeProgress = window.brickverse.onProgress((event) => {
 			setProgress(event);
@@ -81,7 +87,7 @@ function App(): React.JSX.Element {
 			}
 		});
 
-		return removeProgress;
+		return () => { removeProgress(); removeSelection(); };
 	}, []);
 
 	function beginConfiguration(): void {
