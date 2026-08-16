@@ -18,6 +18,7 @@ import {
 
 let mainWindow: BrowserWindow | null = null;
 let operationRunning = false;
+const productUpdates = new Map<BrickVerseApp, Promise<InstallState>>();
 let requestedInstallerProduct: BrickVerseApp | null = null;
 let installerWindowRequested = false;
 
@@ -38,23 +39,34 @@ async function ensureProductCurrent(
 			!state.version ||
 			Date.parse(binary.createdAt) > Date.parse(state.version)
 		) {
+			const activeUpdate = productUpdates.get(target);
+			if (activeUpdate) return await activeUpdate;
 			if (operationRunning)
-				throw new Error("BrickVerse is already being updated.");
-			operationRunning = true;
+				throw new Error("Another installer operation is already running.");
+
+			const update = (async (): Promise<InstallState> => {
+				operationRunning = true;
+				try {
+					return await installProduct(
+						{
+							app: target,
+							branch,
+							installDirectory: state.installDirectory,
+							createDesktopShortcut: false,
+							createStartMenuShortcut: false,
+							autoUpdate: true,
+						},
+						emitProgress,
+					);
+				} finally {
+					operationRunning = false;
+				}
+			})();
+			productUpdates.set(target, update);
 			try {
-				state = await installProduct(
-					{
-						app: target,
-						branch,
-						installDirectory: state.installDirectory,
-						createDesktopShortcut: false,
-						createStartMenuShortcut: false,
-						autoUpdate: true,
-					},
-					emitProgress,
-				);
+				state = await update;
 			} finally {
-				operationRunning = false;
+				productUpdates.delete(target);
 			}
 		}
 	}
