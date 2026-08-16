@@ -1,7 +1,9 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
+import crypto from "node:crypto";
 import AdmZip from "adm-zip";
+import { app } from "electron";
 import type { BrickVerseApp, InstallRequest, InstallState, ProgressEvent } from "./types";
 import { createShortcut, installDirectory, locateExecutable, metadataPath, productName, removeShortcuts } from "./platform";
 import { downloadFile, resolveBinary } from "./binaries";
@@ -65,12 +67,53 @@ async function normalizeExtractedRoot(staging: string): Promise<string> {
 	return entries.length === 1 && entries[0].isDirectory() ? path.join(staging, entries[0].name) : staging;
 }
 
+function cachedArchivePath(target: BrickVerseApp, branch: string, url: string, createdAt: string): string {
+	const identity = crypto.createHash("sha256").update(`${url}\n${createdAt}`).digest("hex").slice(0, 20);
+	return path.join(app.getPath("userData"), "package-cache", target, branch, `${identity}.zip`);
+}
+
+async function isUsableZip(file: string): Promise<boolean> {
+	try {
+		if (!(await exists(file))) return false;
+		return new AdmZip(file).getEntries().length > 0;
+	} catch {
+		return false;
+	}
+}
+
+async function acquirePackage(
+	target: BrickVerseApp,
+	branch: string,
+	url: string,
+	createdAt: string,
+	onProgress: (event: ProgressEvent) => void,
+): Promise<string> {
+	const archive = cachedArchivePath(target, branch, url, createdAt);
+	if (await isUsableZip(archive)) {
+		onProgress({ phase: "checking", percent: 100, message: "Using the cached, verified package..." });
+		return archive;
+	}
+
+	await fs.rm(archive, { force: true });
+	const partial = `${archive}.partial-${process.pid}`;
+	await fs.rm(partial, { force: true });
+	try {
+		await downloadFile(url, partial, onProgress);
+		if (!(await isUsableZip(partial))) throw new Error("The downloaded package is not a valid ZIP archive.");
+		await fs.mkdir(path.dirname(archive), { recursive: true });
+		await fs.rename(partial, archive);
+		return archive;
+	} catch (error) {
+		await fs.rm(partial, { force: true });
+		throw error;
+	}
+}
+
 export async function installProduct(request: InstallRequest, onProgress: (event: ProgressEvent) => void): Promise<InstallState> {
 	const name = productName(request.app);
 	const previous = await getInstallState(request.app);
 	const destination = installDirectory(request.app, request.installDirectory || previous.installDirectory);
 	const work = await fs.mkdtemp(path.join(os.tmpdir(), `brickverse-${request.app}-`));
-	const archive = path.join(work, `${request.app}.zip`);
 	const staging = path.join(work, "staging");
 	const replacement = `${destination}.replacement-${process.pid}-${Date.now()}`;
 	const backup = `${destination}.backup-${process.pid}-${Date.now()}`;
@@ -78,7 +121,7 @@ export async function installProduct(request: InstallRequest, onProgress: (event
 	try {
 		onProgress({ phase: "checking", percent: 0, message: `Finding the latest ${name} build...` });
 		const binary = await resolveBinary(request.app, request.branch);
-		await downloadFile(binary.url, archive, onProgress);
+		const archive = await acquirePackage(request.app, request.branch, binary.url, binary.createdAt, onProgress);
 		await extractZip(archive, staging, onProgress);
 		const isUpdate = previous.installed;
 		onProgress({ phase: isUpdate ? "updating" : "installing", percent: 10, message: `${isUpdate ? "Updating" : "Installing"} ${name}...` });

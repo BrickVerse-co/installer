@@ -466,8 +466,12 @@ function App(): React.JSX.Element {
 								&lt; Back
 							</button>
 
-							<button className="button primary" onClick={finish}>
+							<button className="button secondary" onClick={finish}>
 								Close
+							</button>
+
+							<button className="button primary" onClick={() => void runOperation()} disabled={busy}>
+								Try again
 							</button>
 						</>
 					)}
