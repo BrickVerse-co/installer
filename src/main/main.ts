@@ -19,6 +19,7 @@ import {
 let mainWindow: BrowserWindow | null = null;
 let operationRunning = false;
 const productUpdates = new Map<BrickVerseApp, Promise<InstallState>>();
+let installerUpdateReady = false;
 let requestedInstallerProduct: BrickVerseApp | null = null;
 let installerWindowRequested = false;
 
@@ -67,6 +68,7 @@ async function ensureProductCurrent(
 				state = await update;
 			} finally {
 				productUpdates.delete(target);
+				applyInstallerUpdateWhenIdle();
 			}
 		}
 	}
@@ -182,6 +184,12 @@ function configureUpdater(): void {
 
 	autoUpdater.autoDownload = true;
 	autoUpdater.autoInstallOnAppQuit = true;
+	autoUpdater.setFeedURL({
+		provider: "github",
+		owner: "BrickVerse-co",
+		repo: "installer",
+		releaseType: "release",
+	});
 
 	autoUpdater.on("checking-for-update", () =>
 		mainWindow?.webContents.send(
@@ -205,10 +213,14 @@ function configureUpdater(): void {
 		);
 	});
 	autoUpdater.on("update-downloaded", () => {
+		installerUpdateReady = true;
 		mainWindow?.webContents.send(
 			"updater:status",
-			"Installer update ready. It will apply when you close the app.",
+			operationRunning
+				? "Installer update ready. It will apply after the current operation."
+				: "Installer update ready. Restarting to apply it...",
 		);
+		applyInstallerUpdateWhenIdle();
 	});
 	autoUpdater.on("error", (error) => {
 		console.error("Auto-update failed:", error);
@@ -222,6 +234,12 @@ function configureUpdater(): void {
 		() => void autoUpdater.checkForUpdates().catch(console.error),
 		2500,
 	);
+}
+
+function applyInstallerUpdateWhenIdle(): void {
+	if (!installerUpdateReady || operationRunning) return;
+	installerUpdateReady = false;
+	setTimeout(() => autoUpdater.quitAndInstall(false, true), 1200);
 }
 
 const gotSingleInstanceLock = app.requestSingleInstanceLock();
@@ -321,6 +339,7 @@ ipcMain.handle("installer:install", async (_event, request: InstallRequest) => {
 		throw error;
 	} finally {
 		operationRunning = false;
+		applyInstallerUpdateWhenIdle();
 	}
 });
 
@@ -336,6 +355,7 @@ ipcMain.handle("installer:uninstall", async (_event, target: BrickVerseApp) => {
 		throw error;
 	} finally {
 		operationRunning = false;
+		applyInstallerUpdateWhenIdle();
 	}
 });
 
