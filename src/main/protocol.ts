@@ -47,10 +47,10 @@ export function parseProtocol(raw: string): { target: LaunchTarget; args: string
 	const url = new URL(raw);
 	if (url.protocol !== "brickverse:") throw new Error("Unsupported launch protocol.");
 	const route = url.hostname.toLowerCase();
-	if (route !== "client" && route !== "creator" && route !== "local" && route !== "installer") throw new Error(`Unsupported BrickVerse route: ${route}`);
+	if (route !== "client" && route !== "creator" && route !== "guild-chat" && route !== "local" && route !== "installer") throw new Error(`Unsupported BrickVerse route: ${route}`);
 	if (route === "installer") {
 		const product = url.searchParams.get("product");
-		return { target: "installer", args: product === "creator" || product === "client" ? [product] : [] };
+		return { target: "installer", args: product === "creator" || product === "client" || product === "guild-chat" ? [product] : [] };
 	}
 	const encoded = url.pathname.replace(/^\/+/, "");
 	if (!encoded) return { target: route as LaunchTarget, args: [] };

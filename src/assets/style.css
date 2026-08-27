@@ -45,6 +45,23 @@ button {
 	background: #1b1d21;
 }
 
+.wizardWindow.autoLaunchWindow {
+	grid-template-rows: 1fr;
+	border: 1px solid #35485d;
+	border-radius: 14px;
+	background: #171d25;
+	box-shadow: 0 24px 70px rgba(0, 0, 0, 0.48);
+}
+
+.autoLaunchWindow .wizardHeader,
+.autoLaunchWindow .wizardFooter {
+	display: none;
+}
+
+.autoLaunchWindow .wizardPage {
+	border-radius: inherit;
+}
+
 .wizardHeader {
 	display: flex;
 	align-items: center;
@@ -110,6 +127,44 @@ button {
 
 .wizardBody {
 	padding: 28px 34px;
+}
+
+.autoLaunchPage {
+	display: flex;
+	height: 100%;
+	min-height: 390px;
+	align-items: center;
+	justify-content: center;
+	flex-direction: column;
+	padding: 44px 64px;
+	text-align: center;
+	background: radial-gradient(circle at 50% 25%, #28384b 0, #1b1d21 48%);
+}
+
+.autoLaunchMark {
+	display: grid;
+	width: 88px;
+	height: 88px;
+	margin-bottom: 24px;
+	place-items: center;
+	border: 1px solid #3c526b;
+	border-radius: 24px;
+	background: rgba(32, 35, 40, 0.86);
+	box-shadow: 0 18px 45px rgba(0, 0, 0, 0.3);
+}
+
+.autoLaunchMark img { width: 64px; height: 64px; object-fit: contain; }
+.autoLaunchPage h1 { margin: 0; color: #fff; font-size: 24px; letter-spacing: -0.02em; }
+.autoLaunchMessage { min-height: 20px; margin: 10px 0 24px; color: #b7c1cc; font-size: 13px; }
+.autoLaunchTrack { width: min(420px, 100%); height: 6px; overflow: hidden; border-radius: 999px; background: #101419; }
+.autoLaunchBar { height: 100%; border-radius: inherit; background: linear-gradient(90deg, #0187f8, #52b5ff); transition: width 180ms ease; }
+.autoLaunchTrack.indeterminate .autoLaunchBar { width: 35%; animation: autoLaunchProgress 1.3s ease-in-out infinite; }
+.autoLaunchHint { margin: 15px 0 0; color: #788491; font-size: 11px; }
+.autoLaunchFooter { justify-content: center; }
+
+@keyframes autoLaunchProgress {
+	0% { transform: translateX(-110%); }
+	100% { transform: translateX(310%); }
 }
 
 .introText {

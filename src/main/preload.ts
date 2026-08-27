@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from "electron";
-import type { BrickVerseApp, InstallRequest, ProgressEvent } from "./types";
+import type { AutoLaunchState, BrickVerseApp, InstallRequest, ProgressEvent } from "./types";
 
 contextBridge.exposeInMainWorld("brickverse", {
   platform: process.platform,
@@ -11,6 +11,12 @@ contextBridge.exposeInMainWorld("brickverse", {
   openFolder: (target: BrickVerseApp) => ipcRenderer.invoke("installer:open-folder", target),
   getVersion: () => ipcRenderer.invoke("installer:get-version"),
   getRequestedProduct: () => ipcRenderer.invoke("installer:get-requested-product"),
+  getAutoLaunchState: () => ipcRenderer.invoke("installer:get-auto-launch-state"),
+  onAutoLaunch: (callback: (state: AutoLaunchState) => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, state: AutoLaunchState) => callback(state);
+    ipcRenderer.on("installer:auto-launch", listener);
+    return () => ipcRenderer.removeListener("installer:auto-launch", listener);
+  },
   onSelectProduct: (callback: (target: BrickVerseApp | null) => void) => {
     const listener = (_event: Electron.IpcRendererEvent, target: BrickVerseApp | null) => callback(target);
     ipcRenderer.on("installer:select-product", listener);

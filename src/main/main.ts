@@ -2,6 +2,7 @@ import path from "node:path";
 import { app, BrowserWindow, dialog, ipcMain, shell } from "electron";
 import { autoUpdater } from "electron-updater";
 import type {
+	AutoLaunchState,
 	BrickVerseApp,
 	InstallRequest,
 	InstallState,
@@ -11,6 +12,7 @@ import { getInstallState, installProduct, uninstallProduct } from "./installer";
 import { resolveBinary } from "./binaries";
 import {
 	creatorFiles,
+	creatorExtensions,
 	parseProtocol,
 	protocolUrls,
 	spawnProduct,
@@ -22,6 +24,45 @@ const productUpdates = new Map<BrickVerseApp, Promise<InstallState>>();
 let installerUpdateReady = false;
 let requestedInstallerProduct: BrickVerseApp | null = null;
 let installerWindowRequested = false;
+let autoLaunchState: AutoLaunchState | null = null;
+
+function beginAutoLaunch(target: BrickVerseApp): void {
+	autoLaunchState = {
+		active: true,
+		target,
+		progress: {
+			phase: "checking",
+			percent: 0,
+			message: `Checking ${target === "creator" ? "BrickVerse Creator" : target === "guild-chat" ? "BrickVerse Guild Chat" : "BrickVerse"} for updates…`,
+		},
+	};
+	if (mainWindow) {
+		mainWindow.show();
+		mainWindow.focus();
+		mainWindow.webContents.send("installer:auto-launch", autoLaunchState);
+	}
+}
+
+function endAutoLaunch(): void {
+	if (!autoLaunchState?.active) return;
+	autoLaunchState = { ...autoLaunchState, active: false };
+	mainWindow?.webContents.send("installer:auto-launch", autoLaunchState);
+}
+
+function startUpdateDemo(target: BrickVerseApp): void {
+	beginAutoLaunch(target);
+	const stages: ProgressEvent[] = [
+		{ phase: "checking", percent: 0, message: "Checking for updates…" },
+		{ phase: "downloading", percent: 18, message: "Downloading update… 18%" },
+		{ phase: "downloading", percent: 54, message: "Downloading update… 54%" },
+		{ phase: "extracting", percent: 78, message: "Preparing update…" },
+		{ phase: "updating", percent: 94, message: "Applying update…" },
+		{ phase: "complete", percent: 100, message: "Update preview complete. The app would open now." },
+	];
+	stages.forEach((progress, index) => {
+		setTimeout(() => emitProgress(progress), 700 + index * 900);
+	});
+}
 
 async function ensureProductCurrent(
 	target: BrickVerseApp,
@@ -29,7 +70,7 @@ async function ensureProductCurrent(
 	let state = await getInstallState(target);
 	if (!state.installed || !state.executablePath)
 		throw new Error(
-			`${target === "creator" ? "BrickVerse Creator" : "BrickVerse"} is not installed.`,
+			`${target === "creator" ? "BrickVerse Creator" : target === "guild-chat" ? "BrickVerse Guild Chat" : "BrickVerse"} is not installed.`,
 		);
 
 	if (state.autoUpdate !== false) {
@@ -114,6 +155,8 @@ async function processLaunchArguments(argv: string[]): Promise<boolean> {
 					? "creator"
 					: request.args[0] === "client"
 						? "client"
+						: request.args[0] === "guild-chat"
+							? "guild-chat"
 						: null;
 			if (mainWindow) {
 				mainWindow.show();
@@ -125,11 +168,15 @@ async function processLaunchArguments(argv: string[]): Promise<boolean> {
 			}
 		} else if (request.target === "local")
 			await launchLocalProduct(request.args);
-		else await launchProduct(request.target, request.args);
+		else {
+			beginAutoLaunch(request.target);
+			await launchProduct(request.target, request.args);
+		}
 	}
 
 	for (const file of await creatorFiles(argv)) {
 		handled = true;
+		beginAutoLaunch("creator");
 		await launchProduct("creator", ["-file", file]);
 	}
 
@@ -137,6 +184,10 @@ async function processLaunchArguments(argv: string[]): Promise<boolean> {
 }
 
 function emitProgress(progress: ProgressEvent): void {
+	if (autoLaunchState?.active) {
+		autoLaunchState = { ...autoLaunchState, progress };
+		mainWindow?.webContents.send("installer:auto-launch", autoLaunchState);
+	}
 	mainWindow?.webContents.send("installer:progress", progress);
 	if (process.platform === "win32" || process.platform === "linux") {
 		const value =
@@ -147,13 +198,13 @@ function emitProgress(progress: ProgressEvent): void {
 	}
 }
 
-function createWindow(): void {
+function createWindow(borderless = false): void {
 	mainWindow = new BrowserWindow({
-		width: 760,
-		height: 620,
-		minWidth: 680,
-		minHeight: 560,
+		width: borderless ? 560 : 760,
+		height: borderless ? 360 : 620,
+		...(borderless ? {} : { minWidth: 680, minHeight: 560 }),
 		show: false,
+		frame: !borderless,
 		title: "BrickVerse Installer",
 		backgroundColor: "#0e1624",
 		autoHideMenuBar: true,
@@ -168,9 +219,11 @@ function createWindow(): void {
 
 	const developmentUrl = process.env.VITE_DEV_SERVER_URL;
 	if (developmentUrl) {
-		void mainWindow.loadURL(developmentUrl);
+		void mainWindow.loadURL(`${developmentUrl}${borderless ? "#auto-launch" : ""}`);
 	} else {
-		void mainWindow.loadFile(path.join(__dirname, "../renderer/index.html"));
+		void mainWindow.loadFile(path.join(__dirname, "../renderer/index.html"), {
+			hash: borderless ? "auto-launch" : undefined,
+		});
 	}
 
 	mainWindow.once("ready-to-show", () => mainWindow?.show());
@@ -249,6 +302,27 @@ app.whenReady().then(() => {
 	if (!gotSingleInstanceLock) return;
 	app.setAppUserModelId("gg.brickverse.installer");
 	app.setAsDefaultProtocolClient("brickverse");
+	const demoArgument = process.argv.find((value) => value.startsWith("--demo-update"));
+	if (demoArgument) {
+		const requestedTarget = demoArgument.split("=", 2)[1];
+		const target: BrickVerseApp = requestedTarget === "creator" || requestedTarget === "guild-chat" ? requestedTarget : "client";
+		createWindow();
+		startUpdateDemo(target);
+		return;
+	}
+	const hasProductLaunch =
+		protocolUrls(process.argv).some((rawUrl) => {
+			try {
+				const target = parseProtocol(rawUrl).target;
+				return target === "client" || target === "creator" || target === "guild-chat";
+			} catch {
+				return false;
+			}
+		}) ||
+		process.argv.some((value) =>
+			creatorExtensions.has(path.extname(value).toLowerCase()),
+		);
+	if (hasProductLaunch) createWindow(true);
 	void processLaunchArguments(process.argv)
 		.then((handled) => {
 			if (!handled || installerWindowRequested) {
@@ -256,11 +330,16 @@ app.whenReady().then(() => {
 			} else app.quit();
 		})
 		.catch((error) => {
+			endAutoLaunch();
 			dialog.showErrorBox(
 				"Unable to launch BrickVerse",
 				error instanceof Error ? error.message : String(error),
 			);
-			createWindow();
+			if (!mainWindow) createWindow();
+			else {
+				mainWindow.show();
+				mainWindow.focus();
+			}
 		});
 	configureUpdater();
 
@@ -270,32 +349,35 @@ app.whenReady().then(() => {
 });
 
 app.on("second-instance", (_event, argv) => {
-	void processLaunchArguments(argv).catch((error) =>
+	void processLaunchArguments(argv).catch((error) => {
+		endAutoLaunch();
 		dialog.showErrorBox(
 			"Unable to launch BrickVerse",
 			error instanceof Error ? error.message : String(error),
-		),
-	);
+		);
+	});
 });
 
 app.on("open-url", (event, url) => {
 	event.preventDefault();
-	void processLaunchArguments([url]).catch((error) =>
+	void processLaunchArguments([url]).catch((error) => {
+		endAutoLaunch();
 		dialog.showErrorBox(
 			"Unable to launch BrickVerse",
 			error instanceof Error ? error.message : String(error),
-		),
-	);
+		);
+	});
 });
 
 app.on("open-file", (event, file) => {
 	event.preventDefault();
-	void processLaunchArguments([file]).catch((error) =>
+	void processLaunchArguments([file]).catch((error) => {
+		endAutoLaunch();
 		dialog.showErrorBox(
 			"Unable to open BrickVerse file",
 			error instanceof Error ? error.message : String(error),
-		),
-	);
+		);
+	});
 });
 
 app.on("window-all-closed", () => {
@@ -307,6 +389,7 @@ ipcMain.handle(
 	"installer:get-requested-product",
 	() => requestedInstallerProduct,
 );
+ipcMain.handle("installer:get-auto-launch-state", () => autoLaunchState);
 ipcMain.handle("installer:get-state", (_event, target: BrickVerseApp) =>
 	getInstallState(target),
 );

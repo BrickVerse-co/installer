@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
 import type {
+	AutoLaunchState,
 	BrickVerseApp,
 	InstallState,
 	ProgressEvent,
@@ -28,9 +29,16 @@ const products: Array<{
 		description:
 			"Install the BrickVerse development environment used to build and publish worlds.",
 	},
+	{
+		id: "guild-chat",
+		title: "BrickVerse Guild Chat",
+		description:
+			"Stay connected with your guild, channels, and notifications from the desktop.",
+	},
 ];
 
 function App(): React.JSX.Element {
+	const autoLaunchWindow = window.location.hash === "#auto-launch";
 	const [step, setStep] = useState<WizardStep>("welcome");
 	const [selected, setSelected] = useState<BrickVerseApp>("client");
 	const [branch, setBranch] = useState<ReleaseBranch>("main");
@@ -43,6 +51,7 @@ function App(): React.JSX.Element {
 	>({
 		client: null,
 		creator: null,
+		"guild-chat": null,
 	});
 	const [progress, setProgress] = useState<ProgressEvent | null>(null);
 	const [busy, setBusy] = useState(false);
@@ -50,6 +59,7 @@ function App(): React.JSX.Element {
 		"install",
 	);
 	const [version, setVersion] = useState("");
+	const [autoLaunch, setAutoLaunch] = useState<AutoLaunchState | null>(null);
 
 	const selectedProduct = useMemo(
 		() => products.find((product) => product.id === selected)!,
@@ -60,17 +70,20 @@ function App(): React.JSX.Element {
 	const isInstalled = selectedState?.installed === true;
 
 	async function refreshStates(): Promise<void> {
-		const [client, creator, installerVersion] = await Promise.all([
+		const [client, creator, guildChat, installerVersion] = await Promise.all([
 			window.brickverse.getState("client"),
 			window.brickverse.getState("creator"),
+			window.brickverse.getState("guild-chat"),
 			window.brickverse.getVersion(),
 		]);
 
-		setStates({ client, creator });
+		setStates({ client, creator, "guild-chat": guildChat });
 		setVersion(installerVersion);
 	}
 
 	useEffect(() => {
+		const removeAutoLaunch = window.brickverse.onAutoLaunch(setAutoLaunch);
+		void window.brickverse.getAutoLaunchState().then(setAutoLaunch);
 		void refreshStates();
 		void window.brickverse.getRequestedProduct().then((target) => {
 			if (target) setSelected(target);
@@ -87,7 +100,7 @@ function App(): React.JSX.Element {
 			}
 		});
 
-		return () => { removeProgress(); removeSelection(); };
+		return () => { removeProgress(); removeSelection(); removeAutoLaunch(); };
 	}, []);
 
 	function beginConfiguration(): void {
@@ -150,6 +163,22 @@ function App(): React.JSX.Element {
 	}
 
 	function renderPage(): React.JSX.Element {
+		if (autoLaunch?.active) {
+			const product = products.find((item) => item.id === autoLaunch.target)!;
+			const launchProgress = autoLaunch.progress;
+			const determinate = launchProgress.percent > 0;
+			return (
+				<div className="autoLaunchPage">
+					<div className="autoLaunchMark"><img src={logoUrl} alt="" draggable={false} /></div>
+					<h1>Getting {product.title} ready</h1>
+					<p className="autoLaunchMessage">{launchProgress.message}</p>
+					<div className={`autoLaunchTrack ${determinate ? "" : "indeterminate"}`}>
+						<div className="autoLaunchBar" style={determinate ? { width: `${launchProgress.percent}%` } : undefined} />
+					</div>
+					<p className="autoLaunchHint">It will open automatically when the update is finished.</p>
+				</div>
+			);
+		}
 		if (step === "welcome") {
 			return (
 				<>
@@ -393,7 +422,7 @@ function App(): React.JSX.Element {
 	}
 
 	return (
-		<main className="wizardWindow">
+		<main className={`wizardWindow ${autoLaunchWindow || autoLaunch?.active ? "autoLaunchWindow" : ""}`}>
 			<div className="wizardHeader">
 				<img
 					className="wizardLogo"
@@ -410,10 +439,10 @@ function App(): React.JSX.Element {
 
 			<section className="wizardPage">{renderPage()}</section>
 
-			<footer className="wizardFooter">
+			<footer className={`wizardFooter ${autoLaunch?.active ? "autoLaunchFooter" : ""}`}>
 				<div className="footerLeft">© 2026 Meta Games LLC</div>
 
-				<div className="footerButtons">
+				{!autoLaunch?.active && <div className="footerButtons">
 					{step === "welcome" && (
 						<>
 							<button className="button secondary" onClick={finish}>
@@ -502,7 +531,7 @@ function App(): React.JSX.Element {
 							Finish
 						</button>
 					)}
-				</div>
+				</div>}
 			</footer>
 		</main>
 	);

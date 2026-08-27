@@ -1,21 +1,27 @@
 # BrickVerse Installer
 
 A single Electron/TypeScript application that installs, updates, repairs, launches,
-or removes the BrickVerse Game Client and BrickVerse Creator on Windows, macOS,
-and Linux. Electron bundles the required runtime; users do not need Node.js.
+or removes the BrickVerse Game Client, BrickVerse Creator, and BrickVerse Guild
+Chat. Electron bundles the required runtime; users do not need Node.js.
 
 The installer is also the installed `brickverse://` protocol handler and file
 handler for BrickVerse projects, worlds, models, animations, and addons. Product
 shortcuts route through it so an enabled product update is applied before launch.
+Guild Chat can also be launched through `brickverse://guild-chat`.
 
 ## Install directories
 
 - Windows: `%LOCALAPPDATA%\Programs\BrickVerse` and
-  `%LOCALAPPDATA%\Programs\BrickVerse Creator`
+  `%LOCALAPPDATA%\Programs\BrickVerse Creator`; Guild Chat uses
+  `%LOCALAPPDATA%\Programs\BrickVerseGuildChannels`
 - macOS: `~/Applications/BrickVerse.app` and
   `~/Applications/BrickVerse Creator.app`
 - Linux: `~/.local/share/brickverse/client` and
   `~/.local/share/brickverse/creator`
+
+Guild Chat is installed from the newest usable cross-platform ZIP release in
+`BrickVerse-co/guild-channel-binaries`. Empty releases are skipped automatically;
+the older Windows NSIS artifact remains supported for migration.
 
 These locations are writable without administrator access.
 The setup UI can select a different location for either product. That location is
@@ -34,6 +40,16 @@ required, and uninstalling before an update is no longer supported or necessary.
 npm install
 npm run dev
 ```
+
+Preview the launch-time update UI without downloading or changing an installed product:
+
+```powershell
+npm run demo:update
+npm run demo:update:creator
+npm run demo:update:guild-chat
+```
+
+Run protocol regression checks with `npm run test:protocol`.
 
 Build only the Windows installer:
 
@@ -87,3 +103,4 @@ The installer matches the current game workflows:
 | --- | --- | --- | --- |
 | Client | `BrickVerse.exe` | `BrickVerse.x86_64` | `BrickVerse-macOS.zip` |
 | Creator | `BrickVerseCreator.exe` | `BrickVerseCreator.x86_64` | `BrickVerseCreator-macOS.zip` |
+| Guild Chat | `BrickVerseGuildChannels-win-x64.zip` | `BrickVerseGuildChannels-linux-{arch}.zip` | `BrickVerseGuildChannels-mac-universal.zip` |

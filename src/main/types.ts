@@ -1,4 +1,4 @@
-export type BrickVerseApp = "client" | "creator";
+export type BrickVerseApp = "client" | "creator" | "guild-chat";
 export type ReleaseBranch = "main" | "prod" | "beta";
 export type InstallerAction = "install" | "update" | "repair" | "uninstall";
 
@@ -28,7 +28,17 @@ export interface ProgressEvent {
   totalBytes?: number;
 }
 
+export interface AutoLaunchState {
+  active: boolean;
+  target: BrickVerseApp;
+  progress: ProgressEvent;
+}
+
 export interface BinaryApiPayload {
   url: string;
   createdAt: string;
+}
+
+export interface ResolvedBinary extends BinaryApiPayload {
+  format: "zip" | "nsis";
 }

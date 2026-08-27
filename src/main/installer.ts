@@ -2,9 +2,10 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
 import crypto from "node:crypto";
+import { spawn } from "node:child_process";
 import AdmZip from "adm-zip";
 import { app } from "electron";
-import type { BrickVerseApp, InstallRequest, InstallState, ProgressEvent } from "./types";
+import type { BrickVerseApp, InstallRequest, InstallState, ProgressEvent, ResolvedBinary } from "./types";
 import { createShortcut, installDirectory, locateExecutable, metadataPath, productName, removeShortcuts } from "./platform";
 import { downloadFile, resolveBinary } from "./binaries";
 
@@ -18,6 +19,14 @@ async function writeMetadata(target: BrickVerseApp, data: InstallState): Promise
 	await fs.writeFile(file, JSON.stringify(data, null, 2), "utf8");
 }
 
+async function runProcess(executable: string, args: string[]): Promise<void> {
+	await new Promise<void>((resolve, reject) => {
+		const child = spawn(executable, args, { cwd: path.dirname(executable), windowsHide: true, shell: false });
+		child.once("error", reject);
+		child.once("exit", (code) => code === 0 ? resolve() : reject(new Error(`Installer exited with code ${code ?? "unknown"}.`)));
+	});
+}
+
 export async function getInstallState(target: BrickVerseApp): Promise<InstallState> {
 	let metadata: Partial<InstallState> = {};
 	try {
@@ -26,14 +35,52 @@ export async function getInstallState(target: BrickVerseApp): Promise<InstallSta
 		// Metadata may not exist for older/manual installs.
 	}
 	const directory = installDirectory(target, metadata.installDirectory);
+	let executablePath = metadata.executablePath;
+	if (await exists(directory) && (!executablePath || !(await exists(executablePath)))) {
+		try {
+			executablePath = await locateExecutable(directory, target);
+		} catch {
+			executablePath = undefined;
+		}
+	}
 	return {
-		installed: await exists(directory),
+		installed: typeof executablePath === "string" && await exists(executablePath),
 		installDirectory: directory,
-		executablePath: metadata.executablePath,
+		executablePath,
 		version: metadata.version,
 		branch: metadata.branch,
 		autoUpdate: metadata.autoUpdate ?? true,
 	};
+}
+
+async function installGuildChatNsis(request: InstallRequest, binary: ResolvedBinary, onProgress: (event: ProgressEvent) => void): Promise<InstallState> {
+	const previous = await getInstallState(request.app);
+	const destination = installDirectory(request.app, request.installDirectory || previous.installDirectory);
+	const work = await fs.mkdtemp(path.join(os.tmpdir(), "brickverse-guild-chat-"));
+	const setup = path.join(work, "BrickVerseGuildChannels-Setup.exe");
+	try {
+		await downloadFile(binary.url, setup, onProgress);
+		onProgress({ phase: previous.installed ? "updating" : "installing", percent: 80, message: `${previous.installed ? "Updating" : "Installing"} BrickVerse Guild Chat...` });
+		await fs.mkdir(path.dirname(destination), { recursive: true });
+		await runProcess(setup, ["/S", `/D=${destination}`]);
+		const executablePath = await locateExecutable(destination, request.app);
+		await removeShortcuts(request.app);
+		if (request.createDesktopShortcut) await createShortcut(request.app, executablePath, destination, false);
+		if (request.createStartMenuShortcut) await createShortcut(request.app, executablePath, destination, true);
+		const state: InstallState = {
+			installed: true,
+			installDirectory: destination,
+			executablePath,
+			version: binary.createdAt,
+			branch: request.branch,
+			autoUpdate: request.autoUpdate,
+		};
+		await writeMetadata(request.app, state);
+		onProgress({ phase: "complete", percent: 100, message: `BrickVerse Guild Chat was ${previous.installed ? "updated" : "installed"}.` });
+		return state;
+	} finally {
+		await fs.rm(work, { recursive: true, force: true });
+	}
 }
 
 async function extractZip(zipPath: string, staging: string, onProgress: (event: ProgressEvent) => void): Promise<void> {
@@ -112,6 +159,12 @@ async function acquirePackage(
 export async function installProduct(request: InstallRequest, onProgress: (event: ProgressEvent) => void): Promise<InstallState> {
 	const name = productName(request.app);
 	const previous = await getInstallState(request.app);
+	let resolvedGuildChatBinary: ResolvedBinary | null = null;
+	if (request.app === "guild-chat") {
+		onProgress({ phase: "checking", percent: 0, message: "Finding the latest Guild Chat release..." });
+		resolvedGuildChatBinary = await resolveBinary(request.app, request.branch);
+		if (resolvedGuildChatBinary.format === "nsis") return installGuildChatNsis(request, resolvedGuildChatBinary, onProgress);
+	}
 	const destination = installDirectory(request.app, request.installDirectory || previous.installDirectory);
 	const work = await fs.mkdtemp(path.join(os.tmpdir(), `brickverse-${request.app}-`));
 	const staging = path.join(work, "staging");
@@ -120,7 +173,7 @@ export async function installProduct(request: InstallRequest, onProgress: (event
 
 	try {
 		onProgress({ phase: "checking", percent: 0, message: `Finding the latest ${name} build...` });
-		const binary = await resolveBinary(request.app, request.branch);
+		const binary = resolvedGuildChatBinary ?? await resolveBinary(request.app, request.branch);
 		const archive = await acquirePackage(request.app, request.branch, binary.url, binary.createdAt, onProgress);
 		await extractZip(archive, staging, onProgress);
 		const isUpdate = previous.installed;
@@ -137,7 +190,8 @@ export async function installProduct(request: InstallRequest, onProgress: (event
 		}
 
 		// Never remove a working install until the replacement is complete and runnable.
-		await locateExecutable(replacement, request.app);
+		const replacementExecutable = await locateExecutable(replacement, request.app);
+		if (process.platform !== "win32") await fs.chmod(replacementExecutable, 0o755);
 		try {
 			if (await exists(destination)) await fs.rename(destination, backup);
 			await fs.rename(replacement, destination);
@@ -182,6 +236,17 @@ export async function uninstallProduct(target: BrickVerseApp, onProgress: (event
 	const name = productName(target);
 	const current = await getInstallState(target);
 	onProgress({ phase: "uninstalling", percent: 20, message: `Removing ${name}...` });
+	if (target === "guild-chat" && process.platform === "win32") {
+		const entries = await fs.readdir(current.installDirectory, { withFileTypes: true }).catch(() => []);
+		const uninstaller = entries.find((entry) => entry.isFile() && /^uninstall.*\.exe$/i.test(entry.name));
+		if (uninstaller) {
+			try {
+				await runProcess(path.join(current.installDirectory, uninstaller.name), ["/S"]);
+			} catch {
+				// Fall back to removing the application files below.
+			}
+		}
+	}
 	await fs.rm(current.installDirectory, { recursive: true, force: true });
 	onProgress({ phase: "uninstalling", percent: 70, message: "Removing shortcuts..." });
 	await removeShortcuts(target);

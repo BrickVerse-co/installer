@@ -2,7 +2,7 @@ import fs from "node:fs";
 import fsp from "node:fs/promises";
 import path from "node:path";
 import { net } from "electron";
-import type { BinaryApiPayload, BrickVerseApp, ProgressEvent, ReleaseBranch } from "./types";
+import type { BinaryApiPayload, BrickVerseApp, ProgressEvent, ReleaseBranch, ResolvedBinary } from "./types";
 import { apiPlatform } from "./platform";
 
 const API_BASE = "https://api.brickverse.gg/api/v3/binaries";
@@ -10,7 +10,8 @@ const API_BASE = "https://api.brickverse.gg/api/v3/binaries";
 export async function resolveBinary(
   app: BrickVerseApp,
   branch: ReleaseBranch
-): Promise<{ url: string; createdAt: string }> {
+): Promise<ResolvedBinary> {
+  if (app === "guild-chat") return resolveGuildChatBinary(branch);
   if (branch == "main") branch = "prod"; // Redirect main to prod as the API internally uses prod for the main release channel.
   
   const endpoint = `${API_BASE}/${apiPlatform()}/${branch}/${app}`;
@@ -35,8 +36,41 @@ export async function resolveBinary(
 
   return {
     url: payload.url,
-    createdAt: payload.createdAt
+    createdAt: payload.createdAt,
+    format: "zip"
   };
+}
+
+interface GitHubRelease {
+  draft?: boolean;
+  prerelease?: boolean;
+  published_at?: string;
+  assets?: Array<{ name?: string; browser_download_url?: string }>;
+}
+
+async function resolveGuildChatBinary(branch: ReleaseBranch): Promise<ResolvedBinary> {
+  const response = await net.fetch("https://api.github.com/repos/BrickVerse-co/guild-channel-binaries/releases?per_page=20", {
+    headers: { Accept: "application/vnd.github+json", "User-Agent": "BrickVerse-Installer" }
+  });
+  if (!response.ok) throw new Error(`Guild Chat releases returned HTTP ${response.status}.`);
+  const releases = await response.json() as GitHubRelease[];
+  const allowPrerelease = branch === "beta";
+	const platformToken = process.platform === "win32" ? "win" : process.platform === "darwin" ? "mac" : "linux";
+	const architectureToken = process.platform === "darwin" ? "universal" : process.arch;
+  for (const release of releases) {
+    if (release.draft || (!allowPrerelease && release.prerelease)) continue;
+	const assets = release.assets ?? [];
+	const asset = assets.find((candidate) => {
+		const name = candidate.name?.toLowerCase() ?? "";
+		return name.endsWith(".zip") && name.includes(platformToken) && name.includes(architectureToken);
+	}) ?? assets.find((candidate) => {
+		const name = candidate.name?.toLowerCase() ?? "";
+		return name.endsWith(".zip") && name.includes(platformToken);
+	}) ?? (process.platform === "win32" ? assets.find((candidate) => candidate.name?.toLowerCase() === "brickverseguildchannels-setup.exe") : undefined);
+    if (!asset?.browser_download_url || !release.published_at || Number.isNaN(Date.parse(release.published_at))) continue;
+	return { url: asset.browser_download_url, createdAt: release.published_at, format: asset.name?.toLowerCase().endsWith(".exe") ? "nsis" : "zip" };
+  }
+	throw new Error(`No usable Guild Chat release was found for ${apiPlatform()} ${process.arch}.`);
 }
 
 export async function downloadFile(

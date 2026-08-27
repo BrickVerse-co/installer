@@ -1,4 +1,5 @@
 import type {
+  AutoLaunchState,
   BrickVerseApp,
   InstallRequest,
   InstallState,
@@ -17,6 +18,8 @@ declare global {
       openFolder(target: BrickVerseApp): Promise<void>;
       getVersion(): Promise<string>;
       getRequestedProduct(): Promise<BrickVerseApp | null>;
+      getAutoLaunchState(): Promise<AutoLaunchState | null>;
+      onAutoLaunch(callback: (state: AutoLaunchState) => void): () => void;
       onSelectProduct(callback: (target: BrickVerseApp | null) => void): () => void;
       onProgress(callback: (event: ProgressEvent) => void): () => void;
       onUpdaterStatus(callback: (status: string) => void): () => void;

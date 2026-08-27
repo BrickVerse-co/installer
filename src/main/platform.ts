@@ -13,7 +13,9 @@ export function apiPlatform(): "windows" | "linux" | "macos" {
 }
 
 export function productName(target: BrickVerseApp): string {
-  return target === "creator" ? "BrickVerse Creator" : "BrickVerse";
+  if (target === "creator") return "BrickVerse Creator";
+  if (target === "guild-chat") return "BrickVerse Guild Chat";
+  return "BrickVerse";
 }
 
 export function installDirectory(target: BrickVerseApp, customDirectory?: string): string {
@@ -21,7 +23,8 @@ export function installDirectory(target: BrickVerseApp, customDirectory?: string
   const name = productName(target);
 
   if (process.platform === "win32") {
-    return path.join(process.env.LOCALAPPDATA ?? app.getPath("appData"), "Programs", name);
+    const directoryName = target === "guild-chat" ? "BrickVerseGuildChannels" : name;
+    return path.join(process.env.LOCALAPPDATA ?? app.getPath("appData"), "Programs", directoryName);
   }
 
   if (process.platform === "darwin") {
@@ -68,7 +71,9 @@ export async function locateExecutable(root: string, target: BrickVerseApp): Pro
         "brickversecreator",
         "brickverse creator.exe"
       ]
-    : [
+    : target === "guild-chat"
+      ? ["brickverseguildchannels.exe", "brickverse guild channels.exe", "brickverseguildchannels", "brickverseguildchannels.x86_64"]
+      : [
         "brickverse.exe",
         "brickverse.x86_64",
         "brickverse"
@@ -139,12 +144,13 @@ export async function createShortcut(target: BrickVerseApp, executablePath: stri
 
 export async function removeShortcuts(target: BrickVerseApp): Promise<void> {
   const name = productName(target);
+	const names = target === "guild-chat" ? [name, "BrickVerseGuildChannels"] : [name];
   const paths =
     process.platform === "win32"
-      ? [
-		  path.join(app.getPath("desktop"), `${name}.lnk`),
-		  path.join(startMenuDirectory(), `${name}.lnk`),
-		]
+      ? names.flatMap((shortcutName) => [
+		  path.join(app.getPath("desktop"), `${shortcutName}.lnk`),
+		  path.join(startMenuDirectory(), `${shortcutName}.lnk`),
+		])
       : process.platform === "darwin"
         ? [path.join(app.getPath("desktop"), `${name}.app`)]
         : [
