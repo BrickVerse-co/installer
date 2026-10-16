@@ -56,11 +56,9 @@ async function findFiles(root: string): Promise<string[]> {
 }
 
 export async function locateExecutable(root: string, target: BrickVerseApp): Promise<string> {
-  if (process.platform === "darwin" && root.endsWith(".app")) {
-    const macos = path.join(root, "Contents", "MacOS");
-    const entries = await fs.readdir(macos, { withFileTypes: true });
-    const executable = entries.find((entry) => entry.isFile());
-    if (executable) return path.join(macos, executable.name);
+  if (process.platform === "darwin") {
+    const macExecutable = await locateMacExecutable(root, target);
+    if (macExecutable) return macExecutable;
   }
 
   const files = await findFiles(root);
@@ -88,6 +86,63 @@ export async function locateExecutable(root: string, target: BrickVerseApp): Pro
   const fallback = files.find((file) => file.toLowerCase().endsWith(extension));
   if (!fallback) throw new Error(`Could not find a runnable ${productName(target)} executable after extraction.`);
   return fallback;
+}
+
+async function locateMacExecutable(root: string, target: BrickVerseApp): Promise<string | undefined> {
+  const bundleRoots: string[] = [];
+  if (root.endsWith(".app")) bundleRoots.push(root);
+
+  try {
+    const contents = path.join(root, "Contents", "MacOS");
+    const entries = await fs.readdir(contents, { withFileTypes: true });
+    if (entries.length > 0) bundleRoots.push(root);
+  } catch {
+    // The root may contain an app bundle instead of being one itself
+  }
+
+  try {
+    const entries = await fs.readdir(root, { withFileTypes: true });
+    bundleRoots.push(
+      ...entries
+        .filter((entry) => entry.isDirectory() && entry.name.endsWith(".app"))
+        .map((entry) => path.join(root, entry.name)),
+    );
+  } catch {
+    return undefined;
+  }
+
+  const preferred = target === "creator"
+    ? ["brickversecreator", "brickverse creator", "brickverse"]
+    : target === "guild-chat"
+      ? ["brickverseguildchannels", "brickverse guild channels"]
+      : ["brickverse"];
+
+  for (const bundleRoot of [...new Set(bundleRoots)]) {
+    const macos = path.join(bundleRoot, "Contents", "MacOS");
+    let entries;
+    try {
+      entries = await fs.readdir(macos, { withFileTypes: true });
+    } catch {
+      continue;
+    }
+
+    const files = entries.filter((entry) => entry.isFile());
+    for (const wanted of preferred) {
+      const match = files.find((entry) => entry.name.toLowerCase() === wanted);
+      if (match) return path.join(macos, match.name);
+    }
+
+    for (const entry of files) {
+      try {
+        const stats = await fs.stat(path.join(macos, entry.name));
+        if ((stats.mode & 0o111) !== 0) return path.join(macos, entry.name);
+      } catch {
+        // Ignore files that disappear while the package is being inspected
+      }
+    }
+  }
+
+  return undefined;
 }
 
 export async function createShortcut(target: BrickVerseApp, executablePath: string, installRoot: string, startMenu = false): Promise<void> {
