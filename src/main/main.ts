@@ -10,7 +10,7 @@ import type {
 	InstallState,
 	ProgressEvent,
 } from "./types";
-import { getInstallState, installProduct, uninstallProduct } from "./installer";
+import { cleanupPackageCache, getInstallState, installProduct, uninstallProduct } from "./installer";
 import { resolveBinary } from "./binaries";
 import {
 	creatorFiles,
@@ -307,8 +307,11 @@ function applyInstallerUpdateWhenIdle(): void {
 const gotSingleInstanceLock = app.requestSingleInstanceLock();
 if (!gotSingleInstanceLock) app.quit();
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
 	if (!gotSingleInstanceLock) return;
+	// Clear package archives retained by older installer versions before any
+	// automatic update or user-driven install can begin.
+	await cleanupPackageCache();
 	app.setAppUserModelId("gg.brickverse.installer");
 	app.setAsDefaultProtocolClient("brickverse");
 	const demoArgument = process.argv.find((value) => value.startsWith("--demo-update"));
@@ -430,6 +433,7 @@ ipcMain.handle("installer:install", async (_event, request: InstallRequest) => {
 		emitProgress({ phase: "error", percent: 0, message });
 		throw error;
 	} finally {
+		await cleanupPackageCache();
 		operationRunning = false;
 		applyInstallerUpdateWhenIdle();
 	}
@@ -446,6 +450,7 @@ ipcMain.handle("installer:uninstall", async (_event, target: BrickVerseApp) => {
 		emitProgress({ phase: "error", percent: 0, message });
 		throw error;
 	} finally {
+		await cleanupPackageCache();
 		operationRunning = false;
 		applyInstallerUpdateWhenIdle();
 	}

@@ -13,6 +13,21 @@ async function exists(file: string): Promise<boolean> {
 	try { await fs.access(file); return true; } catch { return false; }
 }
 
+function packageCacheRoot(): string {
+	return path.join(app.getPath("userData"), "package-cache");
+}
+
+/** Package archives are disposable once extraction completes. Never retain old releases. */
+export async function cleanupPackageCache(): Promise<void> {
+	const root = packageCacheRoot();
+	try {
+		await fs.rm(root, { recursive: true, force: true, maxRetries: 3, retryDelay: 150 });
+	} catch (error) {
+		// Cache cleanup must not prevent launching or repairing an installed product.
+		console.warn(`[Installer] Could not completely clear package cache at ${root}:`, error);
+	}
+}
+
 async function writeMetadata(target: BrickVerseApp, data: InstallState): Promise<void> {
 	const file = metadataPath(target);
 	await fs.mkdir(path.dirname(file), { recursive: true });
@@ -114,9 +129,19 @@ async function normalizeExtractedRoot(staging: string): Promise<string> {
 	return entries.length === 1 && entries[0].isDirectory() ? path.join(staging, entries[0].name) : staging;
 }
 
+async function moveOrCopyDirectory(source: string, destination: string): Promise<void> {
+	try {
+		await fs.rename(source, destination);
+	} catch (error) {
+		const code = (error as NodeJS.ErrnoException).code;
+		if (code !== "EXDEV") throw error;
+		await fs.cp(source, destination, { recursive: true });
+	}
+}
+
 function cachedArchivePath(target: BrickVerseApp, branch: string, url: string, createdAt: string): string {
 	const identity = crypto.createHash("sha256").update(`${url}\n${createdAt}`).digest("hex").slice(0, 20);
-	return path.join(app.getPath("userData"), "package-cache", target, branch, `${identity}.zip`);
+	return path.join(packageCacheRoot(), target, branch, `${identity}.zip`);
 }
 
 async function isUsableZip(file: string): Promise<boolean> {
@@ -157,6 +182,8 @@ async function acquirePackage(
 }
 
 export async function installProduct(request: InstallRequest, onProgress: (event: ProgressEvent) => void): Promise<InstallState> {
+	// Reclaim archives left by previous versions, crashes, or cancelled installs.
+	await cleanupPackageCache();
 	const name = productName(request.app);
 	const previous = await getInstallState(request.app);
 	let resolvedGuildChatBinary: ResolvedBinary | null = null;
@@ -176,6 +203,9 @@ export async function installProduct(request: InstallRequest, onProgress: (event
 		const binary = resolvedGuildChatBinary ?? await resolveBinary(request.app, request.branch);
 		const archive = await acquirePackage(request.app, request.branch, binary.url, binary.createdAt, onProgress);
 		await extractZip(archive, staging, onProgress);
+		// Extraction is complete; release the large archive before duplicating the
+		// staged tree into the atomic replacement directory.
+		await fs.rm(archive, { force: true });
 		const isUpdate = previous.installed;
 		onProgress({ phase: isUpdate ? "updating" : "installing", percent: 10, message: `${isUpdate ? "Updating" : "Installing"} ${name}...` });
 		await fs.mkdir(path.dirname(destination), { recursive: true });
@@ -184,9 +214,9 @@ export async function installProduct(request: InstallRequest, onProgress: (event
 		await fs.rm(replacement, { recursive: true, force: true });
 		if (process.platform === "darwin") {
 			const bundles = (await fs.readdir(extractedRoot, { withFileTypes: true })).filter((entry) => entry.isDirectory() && entry.name.endsWith(".app"));
-			await fs.cp(bundles.length === 1 ? path.join(extractedRoot, bundles[0].name) : extractedRoot, replacement, { recursive: true });
+			await moveOrCopyDirectory(bundles.length === 1 ? path.join(extractedRoot, bundles[0].name) : extractedRoot, replacement);
 		} else {
-			await fs.cp(extractedRoot, replacement, { recursive: true });
+			await moveOrCopyDirectory(extractedRoot, replacement);
 		}
 
 		// Never remove a working install until the replacement is complete and runnable.
@@ -229,6 +259,7 @@ export async function installProduct(request: InstallRequest, onProgress: (event
 	} finally {
 		await fs.rm(replacement, { recursive: true, force: true });
 		await fs.rm(work, { recursive: true, force: true });
+		await cleanupPackageCache();
 	}
 }
 
@@ -251,6 +282,7 @@ export async function uninstallProduct(target: BrickVerseApp, onProgress: (event
 	onProgress({ phase: "uninstalling", percent: 70, message: "Removing shortcuts..." });
 	await removeShortcuts(target);
 	await fs.rm(metadataPath(target), { force: true });
+	await cleanupPackageCache();
 	const state: InstallState = { installed: false, installDirectory: current.installDirectory };
 	onProgress({ phase: "complete", percent: 100, message: `${name} was uninstalled.` });
 	return state;
