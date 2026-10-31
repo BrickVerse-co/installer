@@ -20,6 +20,11 @@ import {
 	spawnProduct,
 } from "./protocol";
 
+// The installer only renders a small 2D progress UI. Keeping Chromium on the
+// software compositor avoids creating a second hardware GPU context while a
+// Godot product initializes Vulkan/OpenGL.
+app.disableHardwareAcceleration();
+
 let mainWindow: BrowserWindow | null = null;
 let operationRunning = false;
 const productUpdates = new Map<BrickVerseApp, Promise<InstallState>>();
@@ -307,11 +312,24 @@ function applyInstallerUpdateWhenIdle(): void {
 const gotSingleInstanceLock = app.requestSingleInstanceLock();
 if (!gotSingleInstanceLock) app.quit();
 
+function hasProductLaunchArguments(argv: string[]): boolean {
+	return protocolUrls(argv).some((rawUrl) => {
+		try {
+			const target = parseProtocol(rawUrl).target;
+			return target === "client" || target === "creator" || target === "guild-chat";
+		} catch {
+			return false;
+		}
+	}) || argv.some((value) => creatorExtensions.has(path.extname(value).toLowerCase()));
+}
+
 app.whenReady().then(async () => {
 	if (!gotSingleInstanceLock) return;
-	// Clear package archives retained by older installer versions before any
-	// automatic update or user-driven install can begin.
-	await cleanupPackageCache();
+	const hasProductLaunch = hasProductLaunchArguments(process.argv);
+	// A protocol launch should do no unrelated disk or network work while the
+	// product initializes its renderer. Cache maintenance still runs for the
+	// interactive installer and after install/uninstall operations.
+	if (!hasProductLaunch) await cleanupPackageCache();
 	app.setAppUserModelId("gg.brickverse.installer");
 	app.setAsDefaultProtocolClient("brickverse");
 	const demoArgument = process.argv.find((value) => value.startsWith("--demo-update"));
@@ -322,18 +340,6 @@ app.whenReady().then(async () => {
 		startUpdateDemo(target);
 		return;
 	}
-	const hasProductLaunch =
-		protocolUrls(process.argv).some((rawUrl) => {
-			try {
-				const target = parseProtocol(rawUrl).target;
-				return target === "client" || target === "creator" || target === "guild-chat";
-			} catch {
-				return false;
-			}
-		}) ||
-		process.argv.some((value) =>
-			creatorExtensions.has(path.extname(value).toLowerCase()),
-		);
 	if (hasProductLaunch) createWindow(true);
 	void processLaunchArguments(process.argv)
 		.then((handled) => {
@@ -353,7 +359,7 @@ app.whenReady().then(async () => {
 				mainWindow.focus();
 			}
 		});
-	configureUpdater();
+	if (!hasProductLaunch) void configureUpdater();
 
 	app.on("activate", () => {
 		if (BrowserWindow.getAllWindows().length === 0) createWindow();

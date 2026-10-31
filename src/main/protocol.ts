@@ -1,6 +1,7 @@
 import path from "node:path";
 import fs from "node:fs/promises";
 import { spawn } from "node:child_process";
+import { shell } from "electron";
 import type { BrickVerseApp } from "./types";
 
 export type LaunchTarget = BrickVerseApp | "local" | "installer";
@@ -62,8 +63,22 @@ export function parseProtocol(raw: string): { target: LaunchTarget; args: string
 }
 
 export async function spawnProduct(executable: string, args: string[]): Promise<void> {
+	// Match a manual launch for the normal case and keep the product wholly
+	// outside Electron's child-process lifetime.
+	if (args.length === 0) {
+		const error = await shell.openPath(executable);
+		if (error) throw new Error(error);
+		return;
+	}
+
 	await new Promise<void>((resolve, reject) => {
-		const child = spawn(executable, args, { detached: true, stdio: "ignore", windowsHide: true, shell: false, cwd: path.dirname(executable) });
+		const child = spawn(executable, args, {
+			detached: true,
+			stdio: "ignore",
+			windowsHide: false,
+			shell: false,
+			cwd: path.dirname(executable),
+		});
 		child.once("error", reject);
 		child.once("spawn", () => { child.unref(); resolve(); });
 	});
