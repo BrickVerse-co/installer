@@ -16,24 +16,28 @@ const products: Array<{
 	id: BrickVerseApp;
 	title: string;
 	description: string;
+	mark: string;
 }> = [
 	{
 		id: "client",
 		title: "BrickVerse Game Client",
 		description:
 			"Install the BrickVerse application used to play worlds and experiences.",
+		mark: "▶",
 	},
 	{
 		id: "creator",
 		title: "BrickVerse Creator",
 		description:
 			"Install the BrickVerse development environment used to build and publish worlds.",
+		mark: "</>",
 	},
 	{
 		id: "guild-chat",
 		title: "BrickVerse Guild Chat",
 		description:
 			"Stay connected with your guild, channels, and notifications from the desktop.",
+		mark: "#",
 	},
 ];
 
@@ -214,13 +218,17 @@ function App(): React.JSX.Element {
 											onChange={() => setSelected(product.id)}
 										/>
 
+										<span className={`productMark ${product.id}`} aria-hidden="true">{product.mark}</span>
+
 										<span className="selectionContent">
 											<strong>{product.title}</strong>
 											<span>{product.description}</span>
 										</span>
 
-										<span className="installState">
-											{installed ? "Installed" : "Not installed"}
+										<span className={`installState ${installed ? "installed" : ""}`}>
+											{installed
+												? `${states[product.id]?.version ? `v${states[product.id]?.version} · ` : ""}${states[product.id]?.branch === "beta" ? "Beta" : "Installed"}`
+												: "Not installed"}
 										</span>
 									</label>
 								);
@@ -231,7 +239,7 @@ function App(): React.JSX.Element {
 							<strong>{selectedProduct.title}</strong>
 							<span>
 								{isInstalled
-									? `Currently installed in ${selectedState?.installDirectory}`
+									? `${selectedState?.version ? `Version ${selectedState.version} · ` : ""}${selectedState?.branch === "beta" ? "Beta channel" : "Main channel"} · ${selectedState?.installDirectory}`
 									: "This application is not currently installed."}
 							</span>
 						</div>
