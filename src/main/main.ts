@@ -1,8 +1,6 @@
 import path from "node:path";
-import os from "node:os";
-import fs from "node:fs/promises";
-import { spawn } from "node:child_process";
-import { app, BrowserWindow, dialog, ipcMain, net, shell } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, shell } from "electron";
+import { autoUpdater } from "electron-updater";
 import type {
 	AutoLaunchState,
 	BrickVerseApp,
@@ -29,7 +27,6 @@ let mainWindow: BrowserWindow | null = null;
 let operationRunning = false;
 const productUpdates = new Map<BrickVerseApp, Promise<InstallState>>();
 let installerUpdateReady = false;
-let installerUpdatePath: string | null = null;
 let requestedInstallerProduct: BrickVerseApp | null = null;
 let installerWindowRequested = false;
 let autoLaunchState: AutoLaunchState | null = null;
@@ -251,47 +248,35 @@ function createWindow(borderless = false): void {
 	});
 }
 
-function versionParts(value: string): number[] {
-	return value.replace(/^v/i, "").split(/[.+-]/, 1)[0].split(".").map((part) => Number(part) || 0);
-}
-
-function isNewerVersion(candidate: string, current: string): boolean {
-	const next = versionParts(candidate);
-	const installed = versionParts(current);
-	for (let index = 0; index < Math.max(next.length, installed.length); index++) {
-		if ((next[index] ?? 0) !== (installed[index] ?? 0)) return (next[index] ?? 0) > (installed[index] ?? 0);
-	}
-	return false;
-}
-
 async function configureUpdater(): Promise<void> {
 	if (!app.isPackaged) return;
 	try {
-		mainWindow?.webContents.send("updater:status", "Checking for installer updates…");
-		const response = await net.fetch("https://api.github.com/repos/BrickVerse-co/installer/releases/latest", {
-			headers: { Accept: "application/vnd.github+json", "User-Agent": "BrickVerse-Installer" },
+		autoUpdater.autoDownload = true;
+		autoUpdater.autoInstallOnAppQuit = true;
+		autoUpdater.allowPrerelease = false;
+		autoUpdater.on("checking-for-update", () => {
+			mainWindow?.webContents.send("updater:status", "Checking for installer updates…");
 		});
-		if (!response.ok) throw new Error(`GitHub returned HTTP ${response.status}`);
-		const release = await response.json() as { tag_name?: string; assets?: Array<{ name?: string; browser_download_url?: string }> };
-		if (!release.tag_name || !isNewerVersion(release.tag_name, app.getVersion())) {
+		autoUpdater.on("update-not-available", () => {
 			mainWindow?.webContents.send("updater:status", "Installer is up to date.");
-			return;
-		}
-		const platform = process.platform === "win32" ? "win" : process.platform === "darwin" ? "mac" : "linux";
-		const extension = platform === "win" ? "exe" : platform === "mac" ? "dmg" : "AppImage";
-		const asset = release.assets?.find((item) => item.name?.toLowerCase().includes(platform) && item.name?.toLowerCase().endsWith(extension.toLowerCase()))
-			?? release.assets?.find((item) => item.name?.toLowerCase().endsWith(extension.toLowerCase()));
-		if (!asset?.browser_download_url) throw new Error("No installer artifact for this platform.");
-		mainWindow?.webContents.send("updater:status", `Downloading installer update ${release.tag_name}…`);
-		const download = await net.fetch(asset.browser_download_url, { redirect: "follow" });
-		if (!download.ok || !download.body) throw new Error(`Download returned HTTP ${download.status}`);
-		const updatePath = path.join(os.tmpdir(), asset.name ?? `brickverse-installer-update.${extension}`);
-		await fs.writeFile(updatePath, Buffer.from(await download.arrayBuffer()));
-		if (process.platform === "linux") await fs.chmod(updatePath, 0o755);
-		installerUpdatePath = updatePath;
-		installerUpdateReady = true;
-		mainWindow?.webContents.send("updater:status", "Installer update ready. Restarting to apply it…");
-		applyInstallerUpdateWhenIdle();
+		});
+		autoUpdater.on("update-available", (info) => {
+			mainWindow?.webContents.send("updater:status", `Downloading installer update ${info.version}…`);
+		});
+		autoUpdater.on("download-progress", (progress) => {
+			mainWindow?.webContents.send("updater:status", `Downloading installer update… ${Math.round(progress.percent)}%`);
+		});
+		autoUpdater.on("update-downloaded", (info) => {
+			installerUpdateReady = true;
+			mainWindow?.webContents.send("updater:status", `Installer update ${info.version} is ready. Restarting to apply it…`);
+			applyInstallerUpdateWhenIdle();
+		});
+		autoUpdater.on("error", (error) => {
+			console.warn("Installer update failed:", error);
+			mainWindow?.webContents.send("updater:status", "Could not update the installer.");
+		});
+		mainWindow?.webContents.send("updater:status", "Checking for installer updates…");
+		await autoUpdater.checkForUpdates();
 	} catch (error) {
 		console.warn("Installer update check failed:", error);
 		mainWindow?.webContents.send("updater:status", "Could not check for installer updates.");
@@ -299,14 +284,9 @@ async function configureUpdater(): Promise<void> {
 }
 
 function applyInstallerUpdateWhenIdle(): void {
-	if (!installerUpdateReady || operationRunning || !installerUpdatePath) return;
+	if (!installerUpdateReady || operationRunning) return;
 	installerUpdateReady = false;
-	const updatePath = installerUpdatePath;
-	installerUpdatePath = null;
-	if (process.platform === "win32") spawn(updatePath, ["/S"], { detached: true, stdio: "ignore", windowsHide: true }).unref();
-	else if (process.platform === "darwin") void shell.openPath(updatePath);
-	else void shell.openPath(updatePath);
-	setTimeout(() => app.quit(), 250);
+	autoUpdater.quitAndInstall(false, true);
 }
 
 const gotSingleInstanceLock = app.requestSingleInstanceLock();

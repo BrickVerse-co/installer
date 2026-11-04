@@ -29,24 +29,25 @@
 		"release": "npm run build && electron-builder --publish always"
 	},
 	"dependencies": {
-		"adm-zip": "^0.5.16"
+		"adm-zip": "^0.5.16",
+		"electron-updater": "^6.8.9"
 	},
 	"devDependencies": {
 		"@types/adm-zip": "^0.5.7",
 		"@types/node": "^24.0.0",
+		"@types/react": "^19.1.0",
+		"@types/react-dom": "^19.1.0",
 		"@vitejs/plugin-react": "^4.6.0",
 		"concurrently": "^9.2.0",
 		"cross-env": "^7.0.3",
 		"electron": "^37.2.0",
 		"electron-builder": "^26.0.12",
+		"react": "^19.1.0",
+		"react-dom": "^19.1.0",
 		"rimraf": "^6.0.1",
 		"typescript": "^5.8.3",
 		"vite": "^7.0.0",
-		"wait-on": "^8.0.3",
-		"react": "^19.1.0",
-		"react-dom": "^19.1.0",
-		"@types/react": "^19.1.0",
-		"@types/react-dom": "^19.1.0"
+		"wait-on": "^8.0.3"
 	},
 	"build": {
 		"appId": "gg.brickverse.installer",
