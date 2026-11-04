@@ -37,6 +37,7 @@ export interface AutoLaunchState {
 export interface BinaryApiPayload {
   url: string;
   createdAt: string;
+	version: string;
 }
 
 export interface ResolvedBinary extends BinaryApiPayload {

@@ -33,10 +33,14 @@ export async function resolveBinary(
   if (typeof payload.createdAt !== "string" || Number.isNaN(Date.parse(payload.createdAt))) {
     throw new Error("The binary API response did not contain a valid createdAt timestamp.");
   }
+	if (typeof payload.version !== "string" || !payload.version.trim()) {
+		throw new Error("The binary API response did not contain a valid build version.");
+	}
 
   return {
     url: payload.url,
     createdAt: payload.createdAt,
+		version: payload.version.trim(),
     format: "zip"
   };
 }
@@ -45,6 +49,7 @@ interface GitHubRelease {
   draft?: boolean;
   prerelease?: boolean;
   published_at?: string;
+	tag_name?: string;
   assets?: Array<{ name?: string; browser_download_url?: string }>;
 }
 
@@ -68,7 +73,12 @@ async function resolveGuildChatBinary(branch: ReleaseBranch): Promise<ResolvedBi
 		return name.endsWith(".zip") && name.includes(platformToken);
 	}) ?? (process.platform === "win32" ? assets.find((candidate) => candidate.name?.toLowerCase() === "brickverseguildchannels-setup.exe") : undefined);
     if (!asset?.browser_download_url || !release.published_at || Number.isNaN(Date.parse(release.published_at))) continue;
-	return { url: asset.browser_download_url, createdAt: release.published_at, format: asset.name?.toLowerCase().endsWith(".exe") ? "nsis" : "zip" };
+	return {
+		url: asset.browser_download_url,
+		createdAt: release.published_at,
+		version: release.tag_name?.replace(/^v/i, "") || "release",
+		format: asset.name?.toLowerCase().endsWith(".exe") ? "nsis" : "zip",
+	};
   }
 	throw new Error(`No usable Guild Chat release was found for ${apiPlatform()} ${process.arch}.`);
 }

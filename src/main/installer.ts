@@ -86,7 +86,7 @@ async function installGuildChatNsis(request: InstallRequest, binary: ResolvedBin
 			installed: true,
 			installDirectory: destination,
 			executablePath,
-			version: binary.createdAt,
+			version: binary.version,
 			branch: request.branch,
 			autoUpdate: request.autoUpdate,
 		};
@@ -246,7 +246,7 @@ export async function installProduct(request: InstallRequest, onProgress: (event
 			installed: true,
 			installDirectory: destination,
 			executablePath,
-			version: binary.createdAt,
+			version: binary.version,
 			branch: request.branch,
 			autoUpdate: request.autoUpdate,
 		};

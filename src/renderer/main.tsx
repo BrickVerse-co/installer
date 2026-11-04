@@ -41,6 +41,12 @@ const products: Array<{
 	},
 ];
 
+function buildLabel(version?: string): string {
+	if (!version) return "";
+	const value = version.replace(/^v(?=\d)/i, "");
+	return /^[a-f0-9]{12,}$/i.test(value) ? value.slice(0, 8) : value;
+}
+
 function App(): React.JSX.Element {
 	const autoLaunchWindow = window.location.hash === "#auto-launch";
 	const [step, setStep] = useState<WizardStep>("welcome");
@@ -227,7 +233,7 @@ function App(): React.JSX.Element {
 
 										<span className={`installState ${installed ? "installed" : ""}`}>
 											{installed
-												? `${states[product.id]?.version ? `v${states[product.id]?.version} · ` : ""}${states[product.id]?.branch === "beta" ? "Beta" : "Installed"}`
+											? `${states[product.id]?.version ? `${buildLabel(states[product.id]?.version)} · ` : ""}${states[product.id]?.branch === "beta" ? "Beta" : "Installed"}`
 												: "Not installed"}
 										</span>
 									</label>
@@ -239,7 +245,7 @@ function App(): React.JSX.Element {
 							<strong>{selectedProduct.title}</strong>
 							<span>
 								{isInstalled
-									? `${selectedState?.version ? `Version ${selectedState.version} · ` : ""}${selectedState?.branch === "beta" ? "Beta channel" : "Main channel"} · ${selectedState?.installDirectory}`
+									? `${selectedState?.version ? `Build ${buildLabel(selectedState.version)} · ` : ""}${selectedState?.branch === "beta" ? "Beta channel" : "Main channel"} · ${selectedState?.installDirectory}`
 									: "This application is not currently installed."}
 							</span>
 						</div>
